@@ -1,4 +1,4 @@
-
+#Broad Insititute Data Science Summer 2024 Internship 
 # TCGA & DepMap expression and order parameter analysis
 
 This project involves training and evaluating models at both the lineage and subtype levels using TCGA and DepMap datasets. The primary goal is to evaluate wether we can  use TCGA to classify depmap?
