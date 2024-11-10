@@ -1,0 +1,450 @@
+---
+title: "Abdirahman_Dashbaord2A"
+output: flexdashboard::flex_dashboard
+
+---
+
+Summary of the Attributes {.storyboard}
+=========================================
+
+### Summary
+```{r, echo = FALSE, message = FALSE, warning = FALSE, results = 'hide'}
+knitr::opts_chunk$set(echo = FALSE)
+# Load packages
+packs <- c("tidyverse", "viridis", "sf", "terra", "tidyterra", "spData", 'raster', 'gridExtra', 'gstat')
+lapply(packs, require, character.only = TRUE)
+
+# Read data
+# Boundary map of study region
+germany <- rnaturalearth::ne_countries(country = 'Germany', returnclass = 'sf')
+st_crs(germany)
+common_crs <- st_crs(germany)  # Get the CRS of the boundary map
+
+# Nitrogen Dioxide data
+pathcsv <- system.file('external/no2.csv', package = 'gstat')
+no2.dat <- read_csv(pathcsv, show_col_types = FALSE)
+no2_sf <- st_as_sf(no2.dat, coords = c("station_longitude_deg", "station_latitude_deg"), crs = st_crs(4326))  # Assuming WGS 84
+# 
+
+```
+
+```{r Summary, echo=FALSE}
+# Summary statistics
+no2_summary_stats <- summary(no2_sf$NO2)
+
+# Print summary statistics
+print(no2_summary_stats)
+
+
+```
+
+### Plot of the Distribution of NO2
+```{r, echo=FALSE}
+# Plot the distribution of NO2
+no2_plot <- ggplot(no2_sf, aes(x = NO2)) +
+  geom_histogram(bins = 30, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title='Histrogram of the Distribtuion of N02', x = "Nitrogen Dioxide (NO2) Concentration", y = "Frequency") +
+  theme_minimal()
+no2_plot
+
+
+```
+
+***
+
+
+
+Deterministic Methods {.storyboard}
+=========================================
+### IDW
+
+```{r,echo=FALSE }
+
+# Create a grid for interpolation
+grid <- rast(germany, nrows = 100, ncol = 100)
+
+# Extract the coordinates of all cells
+xy <- as.data.frame(raster::xyFromCell(grid, 1:ncell(grid)))
+
+# Create prediction locations as sf object
+pred_locations <- st_as_sf(xy, coords = c('x', 'y'), crs = st_crs(germany))
+
+# Trim grid to study region
+pred_locations <- st_filter(pred_locations, germany)
+
+# Ensure that pred_locations and no2_sf have the same CRS
+pred_locations <- st_transform(pred_locations, crs = st_crs(no2_sf))
+
+# Create IDW interpolation using all neighbor locations
+idw <- gstat::gstat(formula = NO2 ~ 1, locations = no2_sf, 
+                    nmax = nrow(no2_sf),  # use all the neighbors locations
+                    set = list(idp = 1))  # beta = 1
+# Interpolate
+idw.sf <- raster::predict(idw, pred_locations)
+
+# Convert interpolated results to a data frame and mutate to extract coordinates
+idw.sf2 <- idw.sf %>%
+  mutate(x = st_coordinates(idw.sf)[, 1],
+         y = st_coordinates(idw.sf)[, 2],
+         pred.NO2 = var1.pred)
+
+# Plot of interpolated data
+p1 <- no2_sf %>% ggplot() + 
+  geom_sf() +
+  geom_sf(data = idw.sf2, aes(col = pred.NO2), size = 0.5) + 
+  scale_color_viridis_c() + theme_bw() +
+  labs(title = "Inverse Distance Weighting",
+       y = "Latitude",
+       x = "Longitude",
+       color = "Predicted NO2")
+
+#
+p0 <- ggplot(data = germany) + 
+  geom_sf() + # First layer
+  geom_sf(data = no2_sf, aes(col = NO2), size = 0.5) + 
+  scale_color_viridis_c() + 
+  theme_bw() +
+  labs(title = "NO2 per square meter",
+       y = "Latitude",
+       x = "Longitude")
+# Combine plots
+grid.arrange(p0, p1, ncol = 2)
+
+```
+
+### Closest Observation
+```{r Interpolation: Closest Observation, fig.align='center', echo=FALSE}
+# Voronoi diagram
+v.diag<- voronoi(x=vect(no2_sf), bnd=germany)
+
+#convert the Voroni diagram to an SF object 
+v.diag<- st_as_sf(v.diag)
+
+# Extract the predicted values at prediction points 
+co.sf<-st_intersection(v.diag, pred_locations)
+co.sf<- co.sf%>% rename(pred.NO2=NO2)
+# Plot of interpolated data
+p2<- co.sf%>% ggplot() + 
+  geom_sf(data=co.sf, aes(col=pred.NO2), size=0.5) + 
+  scale_color_viridis_c() + theme_bw()+
+  labs(title= "Closest Observations",
+         y= "Latitude",
+         x= "Longitude",
+         color= "Predicted Price")
+
+
+grid.arrange(p0,p2,ncol=2)
+
+```
+
+### Nearest Neighbor
+```{r Interpolation: Nearest Neighbor, fig.align='center', echo=FALSE}
+
+nn <- gstat::gstat(formula = NO2 ~ 1, locations = no2_sf, nmax = 5,
+                   set = list(idp = 0))
+
+# Interpolate
+nn.sf <- raster::predict(nn, pred_locations)
+nn.sf2 <- nn.sf %>%
+  mutate(x = st_coordinates(nn.sf)[, 1],
+         y = st_coordinates(nn.sf)[, 2],
+         pred.NO2 = var1.pred)
+
+# Plot of interpolated data
+p3 <- germany %>% ggplot() + 
+  geom_sf() +
+  geom_sf(data = nn.sf2, aes(col = pred.NO2), size = 0.5) + 
+  scale_color_viridis_c() + theme_bw() +
+  labs(title = "Nearest Neighbor",
+       y = "Latitude",
+       x = "Longitude",
+       color = "Predicted NO2")
+
+grid.arrange(p0,p3, ncol=2)
+
+```
+
+### Weighted Combination of Methods
+```{r Interpolation, fig.align='center', echo=FALSE}
+# Create data frame
+x = st_coordinates(pred_locations)[, 1]
+y = st_coordinates(pred_locations)[, 2]
+weights <- c(1/3, 1/3, 1/3)
+weighted.NO2 =  co.sf$pred.NO2 * weights[1] + idw.sf2$pred.NO2 * weights[2] + nn.sf2$pred.NO2 * weights[3]
+weight.df <- data.frame(x,y,weighted.NO2)
+ 
+# Transform data frame to sf object
+weight.sf <- st_as_sf(weight.df, coords = c("x", "y"), crs = st_crs(pred_locations))
+
+
+# Plot of interpolated data
+p4 <- ggplot() +
+  geom_sf(data = weight.sf, aes(color = weighted.NO2)) +
+  scale_color_viridis_c() +
+  theme_minimal() +
+  labs(title = "Ensamble ", color = "Weighted NO2 (per sqm)")
+
+grid.arrange(p0,p4, ncol=2)
+
+
+```
+
+```{r Compare approaches, fig.align='center', echo=FALSE}
+# Compare approaches
+gridExtra:: grid.arrange(p1, p2, p3, p4, ncol=2, nrow=2)
+
+```
+Residual bubble plots 
+=========================================
+
+### bubble plot for IDW
+```{r Bubble plot for IDW, echo=FALSE}
+#bubble plot for IDW
+
+idw.df <- raster::predict(idw, no2_sf)
+
+idw.df$station_european_code<-no2_sf$station_european_code
+
+idw.df2 <- left_join(
+  st_drop_geometry(idw.df),   # Drop geometry from idw.df
+  st_drop_geometry(no2_sf)) %>% 
+  mutate(residual = NO2 - var1.pred)
+
+bubble1 <- idw.df2 %>%
+  ggplot(aes(x = NO2, y = var1.pred, colour = residual)) +
+  geom_point(alpha = 0.5)+
+  scale_color_viridis(option = 'A') +
+  theme_bw() +
+  labs(title = "Inverse Distance Weighting\n Residual Plot",
+       y = "Predicted NO2",
+       x = "Observed NO2",
+       colour = "Residual")
+  
+bubble1
+
+```
+
+### Bubble plot for Closer Observation
+```{r Bubble plot for Closer Observation, fig.align='center', echo=FALSE}
+
+co.df<-st_intersection(v.diag, no2_sf)
+
+co.df<-co.df %>%
+    rename(pred.NO2=NO2.1) %>%
+  mutate(residual=NO2-pred.NO2)
+    
+
+bubble_close<-co.df %>%
+  ggplot (aes(x=NO2, y=pred.NO2, colour=residual))+
+  geom_point(alpha= 0.5) + scale_color_viridis(option= 'A')
+  theme_bw()
+  labs( title= "Closest observation \n Residual plot", y="Predicted", x= "observed", col="Residual")
+  
+bubble_close
+
+```
+
+### Bubble plot for Nearest Observation
+
+```{r Bubble plot for Nearest Observation,echo=FALSE}
+
+# Join observed data with NN interpolated data
+
+near.df <- raster::predict(nn, no2_sf)
+
+near.df$station_european_code<-no2_sf$station_european_code
+
+near.df2 <- left_join(
+  st_drop_geometry(near.df),   # Drop geometry from idw.df
+  st_drop_geometry(no2_sf)) %>% 
+  mutate(residual = NO2 - var1.pred)
+
+bubble3 <- near.df2 %>%
+  ggplot(aes(x = NO2, y = var1.pred, colour = residual)) +
+  geom_point(alpha = 0.5)+
+  scale_color_viridis(option = 'A') +
+  theme_bw() +
+  labs(title = " Nearest Observation\n Residual Plot",
+       y = "Predicted NO2",
+       x = "Observed NO2",
+       colour = "Residual")
+
+bubble3
+  
+```
+
+### Bubble plot for Weighted 
+```{r Bubble plot for Weighted, fig.align='center', echo=FALSE}
+
+weighted_joined_df <- weight.sf %>%
+  st_join(no2_sf, join = st_nearest_feature) %>%  # Join by nearest feature: left_join didn't work for me 
+  group_by(NO2) %>%  
+  summarise(
+    weighted_NO2 = mean(weighted.NO2, na.rm = TRUE),  # Average the predictions becuase I keep seeing multiple entries for each point 
+    residual = mean(NO2 - weighted.NO2, na.rm = TRUE)  # Average the residuals
+  ) %>%
+  ungroup()  
+
+
+bubble_weight <- weighted_joined_df %>%
+  ggplot(aes(x = NO2, y = weighted_NO2, colour = residual)) +
+  geom_point(alpha = 0.5) +  
+  scale_color_viridis(option = 'A') + 
+  theme_bw() +  
+  labs(title = "Bubble Plot of Weighted NO2 Residuals",
+       y = "Weighted Predicted NO2",
+       x = "Observed NO2",
+       colour = "Residual")  
+
+bubble_weight
+```
+
+###Cross Validation
+
+```{r Cross-validation, echo=FALSE}
+set.seed(7515)
+
+# Split the data into 5 folds
+k = 5
+folds <- caret::createFolds(no2.dat$NO2, k = k)
+
+# Vectors to store the RMSE values obtained with each method
+rmse1 <- rep(NA, k) # Closest observation
+rmse2 <- rep(NA, k) # IDW
+rmse3 <- rep(NA, k) # Nearest neighbors
+rmse4 <- rep(NA, k) # WEIGHTED
+
+for(i in 1:k) {
+  # Split the data into training and test sets
+  test <- no2_sf[folds[[i]], ]
+  train <- no2_sf[-folds[[i]], ]
+
+  # Closest observation
+  v.diag <- voronoi(x = vect(train), bnd = germany)
+  v.diag <- st_as_sf(v.diag)
+  p1 <- st_intersection(v.diag, test)$NO2 # PREDICTED
+
+  rmse1[i] <- ModelMetrics::rmse(test$NO2, p1)
+
+  # IDW
+  idw <- gstat::gstat(formula = NO2 ~ 1, locations = train, 
+                      nmax = nrow(train), set = list(idp = 1))
+  p2 <- raster::predict(idw, test)$var1.pred
+  rmse2[i] <- ModelMetrics::rmse(test$NO2, p2)
+
+  # Nearest neighbors
+  nn <- gstat::gstat(formula = NO2 ~ 1, locations = train, 
+                     nmax = nrow(train), set = list(idp = 10))
+  p3 <- raster::predict(nn, test)$var1.pred
+  rmse3[i] <- ModelMetrics::rmse(test$NO2, p3)
+
+  # Weighted Combination (weights are inverse RMSE)
+  # Calculate weights only if RMSEs are not NA
+  w <- 1 / c(rmse1[i], rmse2[i], rmse3[i])
+  weight <- w / sum(w)
+  p4 <- p1 * weight[1] + p2 * weight[2] + p3 * weight[3]
+  rmse4[i] <- ModelMetrics::rmse(test$NO2, p4) # Calculate RMSE for the ensemble
+}
+
+# RMSE over the k folds
+RMSE <- data.frame(co = rmse1, idw = rmse2,
+                   nn = rmse3, weighted = rmse4)
+
+# Average RMSE over the k folds
+avg.RMSE <- data.frame(co = mean(rmse1), 
+                       idw = mean(rmse2),
+                       nn = mean(rmse3), 
+                       weighted = mean(rmse4))
+avg.RMSE
+
+```
+
+Statistical Method {.storyboard}
+=========================================
+
+### Frame1.
+
+```{r Frame 1, echo=FALSE}
+# Apply the Kriging weights to the known data values at the sample locations
+
+no2_sp <- as(no2_sf, "Spatial")
+# Convert the prediction grid to Spatial object
+pred_grid <- as(pred_locations, "Spatial")
+
+f.vgram <- automap::autofitVariogram(NO2 ~ 1, input_data = no2_sp)
+
+k.samp <- gstat(formula = NO2 ~ 1, data = no2_sp, model = f.vgram$var_model)
+
+# Interpolating the surface using the fitted variogram.
+krige.pred <- predict(k.samp, newdata = pred_grid)
+
+# Convert the prediction back to sf for easier plotting with ggplot2
+krige.pred_sf <- st_as_sf(krige.pred)
+# Plot the predictions
+p5 <- ggplot(krige.pred_sf) +
+geom_sf(aes(color = var1.pred)) +
+scale_color_viridis(option = "A") +
+theme_bw() +
+labs(title = "Interpolated Surface", y = "Latitude", x = "Longitude",
+     color ="NO2")
+p5
+```
+
+
+### Frame 2
+```{r Frame 2, echo=FALSE}
+# Convert krige.pred to an sf object for plotting
+krige.pred_sf <- st_as_sf(krige.pred)
+# Plot the variance of the predictions
+p_variance <- ggplot(krige.pred_sf) +
+geom_sf(aes(fill = var1.var)) +
+scale_fill_viridis(option = "A") +
+labs(title = "Variance of Predictions", fill = "Variance") +
+theme_minimal()
+p_variance
+
+```
+
+### Frame 3
+```{r Frame 3, echo=FALSE}
+
+set.seed(7515)
+# Perform cross-validation with k-folding (5-fold cross-validation)
+cross.valid <- gstat::gstat.cv(k.samp, nfold = 5)
+# Extract the relevant data from cross-validation
+cv.df <- as.data.frame(cross.valid)
+# Create Bubble plot of observed vs predicted with residuals as color
+cv_plot <- ggplot(cv.df, aes(x = observed, y = var1.pred, color = residual)) +
+geom_point(alpha = 0.5) +
+scale_color_viridis(option = 'A') +
+theme_bw() +
+labs(title = 'Residual Plot', y = 'Predicted \n',
+x = '\n Observed', col='Residual')
+
+print(cv_plot)
+
+# Calculate RMSE
+rmse <- cv.df %>%
+summarise(RMSE = sqrt(mean((var1.pred - observed)^2)))
+print(rmse)
+
+```
+
+Commentary 
+=========================================
+
+The distribution of nitrogen dioxide (NO2) is right-skewed, with a median concentration of 7 NO2 per square meter. The Inverse Distance Weighting (IDW) method yields a smooth surface, with most predicted NO2 values remaining below 12 per square meter. In contrast, the nearest observation method exhibits less smoothness, and its range of predicted NO2 values aligns closely with the range of observed NO2 levels. The nearest neighbor method is similarly less smooth, but it produces a narrower range of predicted NO2 values compared to the observed range. The weighted interpolation method shows a smoother distribution than the nearest neighbor, with most areas having NO2 concentrations below 10 per square meter.
+
+Both bubble plots for the IDW, nearest observation, and closer observation methods reveal that the points lie along the diagonal line, with residuals close to zero. This indicates that both models effectively predict NO2 concentrations.
+The bubble plot of the weighted method shows that most of the points don't fall on the diagonal line and the points take different colors indicating the variance in the residual.
+
+Cross-validation results show the following root mean square errors (RMSE): 
+- Co: 5.175473 
+- IDW: 3.614676 
+- Nearest Neighbor: 4.408442 
+- Weighted: 3.958132
+
+The IDW method demonstrates the best performance, as it has the lowest RMSE.
+
+Regarding the Kriging method, the map of predicted NO2 concentrations per square meter appears somewhat smooth, with most areas showing concentrations around 10 NO2 per square meter. Some regions exhibit concentrations nearing 20 NO2 per square meter, while a few areas have values below 5 NO2 per square meter. The variance of these predictions is less than 5, and the RMSE is 4, which is an improvement over both the nearest observations and closest observation models.
+

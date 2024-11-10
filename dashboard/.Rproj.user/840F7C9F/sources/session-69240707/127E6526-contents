@@ -1,0 +1,120 @@
+---
+title: 'STAT 219 Spatial Statistics'
+subtitle: 'Geostatistical Data'
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+remove(list=ls())
+cat('\014')
+
+# Load packages
+packs <- c('tidyverse','gridExtra', 'viridis', 'sf', 'gstat')
+lapply(packs, require, character.only = TRUE)
+```
+<br/> 
+
+<center> 
+### Block 2c: Statistical Approach: Ordinary Kriging
+**Example: Meuse Data**
+</center>
+<br/>
+
+The *meuse* data, from the *sp* package, contains zinc and other heavy metal concentrations of the top soil collected at locations in a flood plain of the Meuse river near Stein, the Netherlands (also known as the Maas River). The standard coordinates of Dutch topographical maps are in metres and the coordinate reference system for these data is EPSG:28992.
+
+```{r, Load & Plot Meuse Data, fig.dim=c(4,4), fig.align='center'}
+## Load  Meuse data (needs sp package)
+library(sp)
+?meuse
+data(meuse)
+
+
+# Convert meuse data to sf object with coordinate reference system EPSG:28992
+
+
+# Plot zinc concentration in Meuse data
+p1 
+ 
+
+# Scatter plot of zinc measurements and normalized distance to the river
+
+```
+
+The *meuse.grid*, also in the *sp* package, is a prediction grid that covers the Meuse study area.
+```{r Load & Plot Prediction Grid}
+## Load  Meuse Prediction Grid (needs sp package)
+?meuse.grid
+
+
+# Convert grid sf object with coordinate reference system EPSG:28992
+
+# Plot Meuse prediction grid
+ 
+```
+
+##### Ordinary Kriging
+
+The `variogram()` function in the *gstat* package calculates the sample variogram from the Meuse data.
+
+ - Set the argument to $z ~ 1$ to get the sample variogram for data $Z$
+ 
+<br>
+
+a) Compute the sample (experimental, empirical) variogram for transformed zinc
+```{r Sample Variogram, fig.dim=c(5,4), fig.align='center'}
+
+```
+
+b) Define the sample variogram model (aka fitted variogram)
+```{r Variogram Model, fig.align='center'}
+vgm()                   # List of all available models
+show.vgms(par.strip.text = list(cex = 0.75)) # Visualize all  available models
+```
+
+```{r}
+
+```
+
+c) Interpolate
+```{r Interpolate, fig.align='center'}
+# Apply the Kriging weights to the known data values at the sample locations 
+ 
+
+# Interpolating the surface using the fitted variogram.
+ 
+
+# Plot the predictions
+p2  
+ 
+```
+
+```{r Variance of Predictions, fig.dim=c(5,4), fig.align='center'}
+# Plot the variance of the predictions 
+
+```
+
+```{r Cross-validation}
+set.seed(7515)
+
+
+# Create Bubble plot
+cv.df %>% 
+  ggplot(aes(x=observed, y=var1.pred, colour = residual)) +
+  geom_point(alpha=0.5) + scale_color_viridis(option='A')+
+  theme_bw() +
+  labs(title = 'Residual Plot', y = 'Predicted \n', 
+       x = '\n Observed', col='Residual') 
+
+# Calculate RMSE
+
+```
+
+The `variogram()` function can also be used to calculate the sample variogram for residuals if a linear model has been specified (i.e., if we want to remove trend in the data). See the documentation for examples.
+
+<center> 
+**END**
+</center>

@@ -1,0 +1,240 @@
+---
+title: 'STAT 219 Spatial Statistics'
+subtitle: 'Geostatistical Data'
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+remove(list=ls())
+cat('\014')
+
+install.packages( "remotes")
+library(remotes)
+install_github("r-spatial/sf", force=TRUE)
+library(sf)
+# Load packages
+packs <- c("tidyverse", "viridis", "sf", "terra", "tidyterra", "spData", 'raster')
+lapply(packs, require, character.only = TRUE)
+```
+<br/> 
+
+<center> 
+### Block 2a: Spatial Interpolation
+**Example: Property Cost in Greece**
+</center>
+<br/> 
+To illustrate the spatial interpolation methods, we would like to predict the prices of properties continuously in space in Athens, Greece. The *properties* data available in the *spData* package (Bivand, Nowosad, and Lovelace 2022) contains the price of apartments in Athens, Greece, in 2017. The  *depmunic* object, also in the *spData* package contains the administrative divisions boundary map for this study region.
+<br/>
+
+##### 1. Explore the dataset:
+```{r Explore dataset:}
+# Data: Requires package spData
+?properties
+properties.sf <- spData::properties 
+View(properties.sf)
+st_crs(properties.sf) # get common crs
+
+# Boundary map of study region: Requires spData
+?depmunic
+athens <- st_union(spData::depmunic) %>% st_sf()
+class(athens)
+st_crs(athens) #same corrdinate systme
+# Plot points within boundary
+p0 <- ggplot(data = athens) + 
+  geom_sf() + # First layer
+  geom_sf(data = properties.sf, aes(col = prpsqm), size = 0.5) + 
+  scale_color_viridis_c() + 
+  theme_bw() +
+  labs(title = "Asking price per square meter",
+       y = "Latitude",
+       x = "Longitude")
+
+p0
+```
+
+##### 2. Create a prediction grid:
+```{r Create a prediction grid, fig.align='center'}
+# Create a raster grid covering the study region
+grid<-rast(athens, nrows=100, ncol=100)
+ 
+# Extract the coordinates of all cells
+xy<-as.data.frame(raster:: xyFromCell(grid, 1:ncell(grid))) #what is happening here?
+
+# Transform xy data frame to sf object and assign CRS
+pred_locations<- st_as_sf(xy, coords=c('x', 'y'), crs=st_crs(athens))
+plot(pred_locations)
+# Trim grid to study region
+pred_locations<- st_filter(pred_locations, athens)
+
+
+# Plot prediction grid
+pred_locations%>%ggplot() +
+  geom_sf() + theme_bw() + 
+  labs(title= "Prediction Grid",
+       x= "latititude",
+       y= "longitude")
+ 
+```
+
+##### 3. Method 1: Closest Observation 
+```{r Interpolation: Closest Observation, fig.align='center'}
+# Voronoi diagram
+v.diag<- voronoi(x=vect(properties.sf), bnd=athens)
+plot(v.diag)
+points(vect(properties.sf), cex=0.25)
+class(v.diag)
+#convert the Voroni diagram to an SF object 
+v.diag<- st_as_sf(v.diag)
+# Extract the predicted values at prediction points 
+co.sf<-st_intersection(v.diag, pred.locations)
+co.sf<- co.sf%>% rename(pred.pqsm= prpsqm)
+# Plot of interpolated data
+p1<- co.sf%>% ggplot() + 
+  geom_sf(data=co.sf, aes(col=pred.pqsm), size=0.5) + 
+  scale_color_viridis_c() + theme_bw()+
+  labs(title= "Closest Observations",
+         y= "Latitude",
+         x= "Longitude",
+         color= "Predicted Price")
+p1
+
+
+grid.arrange(p0,p1,ncol=2)
+
+```
+
+##### 4. Method 2: Inverse Distance Weighting
+```{r Interpolation: Inverse Distance Weighting, fig.align='center'}
+idw <- gstat::gstat(formula = prpsqm ~ 1, locations = properties.sf,
+             nmax = nrow(properties.sf), # use all the neighbors locations
+             set = list(idp = 1)) # beta = 1
+
+# Interpolate
+idw.sf<-raster::predict(idw, pred_locations)
+
+idw.sf2<- idw.sf%>%
+  mutate(x= st_coordinates(idw.sf)[,1],
+         y=st_coordinates(idw.sf)[,2],
+         pred.psqm=var1.pred)
+
+# Plot of interpolated data
+p2<- athens%>% ggplot() + 
+  geom_sf()+
+  geom_sf(data=idw.sf2, aes(col=pred.psqm), size=0.5) + 
+  scale_color_viridis_c() + theme_bw()+
+  labs(title= "Inverse Distance Weighting",
+         y= "Latitude",
+         x= "Longitude",
+         color= "Predicted Price")
+p2  
+
+grid.arrange(p0,p2, ncol=2)
+
+```
+
+##### 5. Method 3: Nearest Neighbor
+```{r Interpolation: Nearest Neighbor, fig.align='center'}
+nn <- gstat::gstat(formula = prpsqm ~ 1, locations = properties.sf, nmax = 5,
+                   set = list(idp = 0))
+
+# Interpolate
+nn.sf <- raster::predict(nn, pred.locations)
+nn.sf2 <- nn.sf %>%
+  mutate(x = st_coordinates(nn.sf)[, 1],
+         y = st_coordinates(nn.sf)[, 2],
+         pred.psqm = var1.pred)
+
+# Plot of interpolated data
+p3 <- athens %>% ggplot() + 
+  geom_sf() +
+  geom_sf(data = nn.sf, aes(col = pred.psqm), size = 0.5) + 
+  scale_color_viridis_c() + theme_bw() +
+  labs(title = "Nearest Neighbor",
+       y = "Latitude",
+       x = "Longitude",
+       color = "Predicted Price")
+
+grid.arrange(p0,p3, ncol=2)
+
+p3
+
+ 
+```
+
+##### 6. Weighted Combination of Methods
+```{r Interpolation: Weighted Combination of Methods, fig.align='center'}
+# Create data frame
+x = st_coordinates(pred.locations)[, 1]
+y = st_coordinates(pred.locations)[, 2]
+weights <- c(1/3, 1/3, 1/3)
+weighted.price =  co.sf$pred.pqsm * weights[1] + idw.sf2$pred.psqm * weights[2] + nn.sf2$pred.psqm * weights[3]
+weight.df <- data.frame(x,y,weighted.price)
+ 
+# Transform data frame to sf object
+weight.sf <- st_as_sf(weight.df, coords = c("x", "y"), crs = st_crs(pred.locations))
+
+
+# Plot of interpolated data
+p4 <- ggplot() +
+  geom_sf(data = weight.sf, aes(color = weighted.price)) +
+  scale_color_viridis_c() +
+  theme_minimal() +
+  labs(title = "Ensamble ", color = "Weighted Price (per sqm)")
+grid.arrange(p0,p4, ncol=2)
+grid.arrange(p1,p2,p3,p4, ncol=4)
+
+
+```
+
+```{r Compare approaches, fig.align='center'}
+# Compare approaches
+gridExtra:: grid.arrange(p1, p2, p3, p4, ncol=2, nrow=2)
+```
+### Block 2(b)Validation 
+### 3.Performance Assesment: Predicted vs Observed Bubble Plots
+```{r}
+co.df<-st_intersection(v.diag, properties.sf)
+#names(co.df)
+co.df<-co.df %>%
+    rename(pred.psqm=prpsqm.1) %>%
+  mutate(residual=prpsqm-pred.psqm)
+    
+
+b1<-co.df %>%
+  ggplot (aes(x=prpsqm, y=pred.psqm, colour=residual))+
+  geom_point(alpha= 0.5) + scale_color_viridis(option= 'A')
+  theme_bw()
+  labs( title= "Closest observation \n Residual plot", y="Predicted", x= "observed", col="Residual")
+b1
+```
+```{r}
+#bubble plot for IDW
+idw.df<-st_intersection(v.diag, properties.sf)
+
+idw.df$od<-properties.sf$id
+
+idw.df2<- left_join(st_drop_geometry (idw.df), 
+                   st_drop_geometry(properties.sf) %>%
+      #rename(pred.psqm=pred.psqm)) %>%
+      mutate(residual= prpsqm- pred.psqm) %>%
+
+b2 <- idw.df2 %>%
+  ggplot(aes(x = prpsqm, y = pred.psqm, colour = residual)) +
+  geom_point(alpha = 0.5)+
+  scale_color_viridis(option = 'A') +
+  theme_bw() +
+  labs(title = "Inverse Distance Weighting\n Residual Plot",
+       y = "Predicted Price",
+       x = "Observed Price",
+       colour = "Residual")
+
+b2
+
+```
+<center> 
+**END**
+</center>

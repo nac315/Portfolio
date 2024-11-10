@@ -1,0 +1,24 @@
+{
+    "id": "F37910E8",
+    "path": "/cloud/project/STAT219 Block 2c Spatial Interpolation-Statistical Approach (Meuse).Rmd",
+    "project_path": "STAT219 Block 2c Spatial Interpolation-Statistical Approach (Meuse).Rmd",
+    "type": "r_markdown",
+    "hash": "2685942020",
+    "contents": "",
+    "dirty": false,
+    "created": 1729629483671.0,
+    "source_on_save": false,
+    "relative_order": 9,
+    "properties": {
+        "Source": "Source",
+        "chunk_output_type": "console"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1727831035,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1727831035,
+    "read_only": false,
+    "read_only_alternatives": []
+}

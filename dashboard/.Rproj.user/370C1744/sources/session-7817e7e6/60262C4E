@@ -1,0 +1,28 @@
+{
+    "id": "60262C4E",
+    "path": null,
+    "project_path": null,
+    "type": "object_explorer",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1730048738739.0,
+    "source_on_save": false,
+    "relative_order": 7,
+    "properties": {
+        "id": "392dd1e68f6a4fcb92bd6fd578868ce1",
+        "name": "bubble_plot",
+        "title": "bubble_plot",
+        "language": "R",
+        "source_window_id": "",
+        "Source": "Source"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 108884526558465,
+    "encoding": "",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1730048738739,
+    "read_only": false,
+    "read_only_alternatives": []
+}

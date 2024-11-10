@@ -1,0 +1,27 @@
+{
+    "id": "F609731B",
+    "path": "/cloud/project/STAT219 Block 2b Deterministic Approach-Model Assessment (Greece).Rmd",
+    "project_path": "STAT219 Block 2b Deterministic Approach-Model Assessment (Greece).Rmd",
+    "type": "r_markdown",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1728482012617.0,
+    "source_on_save": false,
+    "relative_order": 3,
+    "properties": {
+        "chunk_output_type": "console",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "106,16",
+        "scrollLine": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1728573018,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1728573018709,
+    "read_only": false,
+    "read_only_alternatives": []
+}

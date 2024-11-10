@@ -1,0 +1,28 @@
+{
+    "id": "8674116D",
+    "path": null,
+    "project_path": null,
+    "type": "object_explorer",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1730039098343.0,
+    "source_on_save": false,
+    "relative_order": 5,
+    "properties": {
+        "id": "39a42d1b8f5b4971a4c9edd497593b9c",
+        "name": "f.vgram",
+        "title": "f.vgram",
+        "language": "R",
+        "source_window_id": "",
+        "Source": "Source"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1730039041,
+    "encoding": "",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1730039098343,
+    "read_only": false,
+    "read_only_alternatives": []
+}

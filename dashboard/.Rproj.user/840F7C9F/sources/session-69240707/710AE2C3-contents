@@ -1,0 +1,83 @@
+---
+title: 'STAT 219 Spatial Statistics'
+subtitle: 'Geostatistical Data'
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+remove(list=ls())
+cat('\014')
+
+# Load packages
+packs <- c()
+lapply(packs, require, character.only = TRUE)
+```
+<br/> 
+
+<center> 
+### Block 2a: Spatial Interpolation
+**Example: Property Cost in Greece (continued)**
+ 
+</center>
+<br/> 
+
+##### 1. Explore the dataset:
+```{r Explore dataset:}
+# Data: Requires package spData
+properties.sf <- spData::properties
+
+# Boundary map of study region: Requires spData
+athens <- st_union(spData::depmunic) %>% st_sf()
+```
+
+##### 2. Create a prediction grid:
+```{r Create a prediction grid}
+ 
+```
+
+##### 3. Performance Assessment: Cross-validation
+```{r Cross-validation}
+set.seed(7515)
+
+# Split the data into 5 folds
+k =   
+folds  
+
+# Vectors to store the RMSE values obtained with each method
+rmse1 <- rep(NA, k) # Closest observation
+rmse2 <- rep(NA, k) # IDW
+rmse3 <- rep(NA, k) # Nearest neighbors
+rmse4 <- rep(NA, k) # Ensemble
+
+for(k in 1:5) {
+# Split the data into training and test sets
+test <- properties.sf[ ]
+train <- properties.sf[ ]
+
+# Closest observation
+ 
+# IDW
+
+# Nearest neighbors
+
+# Weighted Combination (weights are inverse RMSE so lower RMSE -> higher weight)
+ 
+}
+# RMSE over the k folds
+RMSE <- data.frame(co = rmse1, idw = rmse2,
+           nn = rmse3, weighted = rmse4)
+RMSE
+
+# Average RMSE over the k folds
+avg.RMSE <- data.frame(co = mean(rmse1), idw = mean(rmse2),
+           nn = mean(rmse3), weighted = mean(rmse4))
+avg.RMSE
+```
+
+<center> 
+**END**
+</center>

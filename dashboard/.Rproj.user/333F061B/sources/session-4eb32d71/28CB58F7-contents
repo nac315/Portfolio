@@ -1,0 +1,12 @@
+Practice Exercise
+
+
+
+Assignment 2
+General:
+- Please review the comments from the previous exercise regarding following the instructions carefully. (Re: Title of the YAML)
+- Proof read carefully. The method is 'Kriging' not 'Kriggin'.
+- Code should not be in the output. In class we discussed a workaround to ensure that messages do not appear in the output. Please see me if you have questions about this.
+- Page 3. You should not have 'floating plots' without commentary.
+- Missing the accompanying variance plot for Ordinary Kriging.
+

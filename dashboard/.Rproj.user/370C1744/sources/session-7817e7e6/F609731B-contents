@@ -1,0 +1,115 @@
+---
+title: 'STAT 219 Spatial Statistics'
+subtitle: 'Geostatistical Data'
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+remove(list=ls())
+cat('\014')
+
+# Load packages
+packs <- c("tidyverse", "viridis", "sf", "terra", "tidyterra", "spData", 'raster')
+lapply(packs, require, character.only = TRUE)
+```
+<br/> 
+
+<center> 
+### Block 2a: Spatial Interpolation
+**Example: Property Cost in Greece (continued)**
+ 
+</center>
+<br/> 
+
+##### 1. Explore the dataset:
+```{r Explore dataset:}
+# Data: Requires package spData
+properties.sf <- spData::properties
+
+# Boundary map of study region: Requires spData
+athens <- st_union(spData::depmunic) %>% st_sf()
+```
+
+##### 2. Create a prediction grid:
+```{r Create a prediction grid}
+# Create a raster grid covering the study region
+grid<-rast(athens, nrows=100, ncol=100)
+ 
+# Extract the coordinates of all cells
+xy<-as.data.frame(raster:: xyFromCell(grid, 1:ncell(grid))) #what is happening here?
+
+# Transform xy data frame to sf object and assign CRS
+pred.locations<- st_as_sf(xy, coords=c('x', 'y'), crs=st_crs(athens))
+#plot(pred_locations)
+# Trim grid to study region
+pred.locations<- st_filter(pred.locations, athens)
+
+```
+
+##### 3. Performance Assessment: Cross-validation
+```{r Cross-validation}
+set.seed(7515)
+
+# Split the data into 5 folds
+k = 5
+folds <-caret::createFolds(properties$prpsqm, k=k) 
+
+# Vectors to store the RMSE values obtained with each method
+rmse1 <- rep(NA, k) # Closest observation
+rmse2 <- rep(NA, k) # IDW
+rmse3 <- rep(NA, k) # Nearest neighbors
+rmse4 <- rep(NA, k) # Ensemble
+
+for(i in 1:k) {
+# Split the data into training and test sets
+test <- properties.sf[ folds[[i]], ]
+train <- properties.sf[-folds[[i]], ]
+
+# Closest observation
+ 
+v.diag<- voronoi(x=vect(train), bnd=athens)
+v.diag<- st_as_sf(v.diag)
+p1<-st_intersection(v.diag,test )$prpsqm #PREDICTED
+
+rmse1[k]<-ModelMetrics::rmse(test$prpsqm, p1)
+
+# IDW
+
+idw<-gstat::gstat(formula=prpsqm~1, locations=train, 
+                  nmax=nrow(train),
+                  set=list(idp=1))
+p2<-raster::predict(idw, test)$var1.pred
+rmse2[i]<-ModelMetrics::rmse1(test$prpsqm, p2)
+
+# Nearest neighbors
+nn<-gstat::gstat(formula=prpsqm~1, locations=train, 
+                  nmax=nrow(train),
+                  set=list(idp=10))
+
+p3<-raster::predict(nn, test)$var1.pred
+rmse3[i]<-ModelMetrics::rmse2(test$prpsqm, p3)
+
+# Weighted Combination (weights are inverse RMSE so lower RMSE -> higher weight)
+w<- 1/c(rmse1[i], rmse[i],rmse3[i])
+weight<-w/sum(w)
+p4<-p1*weight[1]+p2*weight[2]+p3*weight[3]
+ 
+}
+# RMSE over the k folds
+RMSE <- data.frame(co = rmse1, idw = rmse2,
+           nn = rmse3, weighted = rmse4)
+RMSE
+
+# Average RMSE over the k folds
+avg.RMSE <- data.frame(co = mean(rmse1), idw = mean(rmse2),
+           nn = mean(rmse3), weighted = mean(rmse4))
+avg.RMSE
+```
+
+<center> 
+**END**
+</center>

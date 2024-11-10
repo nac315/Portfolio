@@ -1,0 +1,109 @@
+"0","knitr::opts_chunk$set(echo = FALSE)"
+"0","# Load packages"
+"0","packs <- c(""tidyverse"", ""viridis"", ""sf"", ""terra"", ""tidyterra"", ""spData"", 'raster', 'gridExtra')"
+"0","lapply(packs, require, character.only = TRUE)"
+"1","[[1]]
+"
+"1","[1]"
+"1"," TRUE"
+"1","
+"
+"1","
+"
+"1","[[2]]
+"
+"1","[1]"
+"1"," TRUE"
+"1","
+"
+"1","
+"
+"1","[[3]]
+"
+"1","[1]"
+"1"," TRUE"
+"1","
+"
+"1","
+"
+"1","[[4]]
+"
+"1","[1]"
+"1"," TRUE"
+"1","
+"
+"1","
+"
+"1","[[5]]
+"
+"1","[1]"
+"1"," TRUE"
+"1","
+"
+"1","
+"
+"1","[[6]]
+"
+"1","[1]"
+"1"," TRUE"
+"1","
+"
+"1","
+"
+"1","[[7]]
+"
+"1","[1]"
+"1"," TRUE"
+"1","
+"
+"1","
+"
+"1","[[8]]
+"
+"1","[1]"
+"1"," TRUE"
+"1","
+"
+"1","
+"
+"0","# Read data"
+"0","# Boundary map of study region"
+"0","germany <- rnaturalearth::ne_countries(country = 'Germany', returnclass = 'sf')"
+"0","st_crs(germany)"
+"1","Coordinate Reference System:"
+"1","
+"
+"1","  User input:"
+"1"," "
+"1","WGS 84"
+"1"," "
+"1","
+"
+"1","  wkt:
+"
+"1",""
+"1","GEOGCRS[""WGS 84"",
+    DATUM[""World Geodetic System 1984"",
+        ELLIPSOID[""WGS 84"",6378137,298.257223563,
+            LENGTHUNIT[""metre"",1]]],
+    PRIMEM[""Greenwich"",0,
+        ANGLEUNIT[""degree"",0.0174532925199433]],
+    CS[ellipsoidal,2],
+        AXIS[""latitude"",north,
+            ORDER[1],
+            ANGLEUNIT[""degree"",0.0174532925199433]],
+        AXIS[""longitude"",east,
+            ORDER[2],
+            ANGLEUNIT[""degree"",0.0174532925199433]],
+    ID[""EPSG"",4326]]"
+"1",""
+"1","
+"
+"0","common_crs <- st_crs(germany)  # Get the CRS of the boundary map"
+"0",""
+"0","# Nitrogen Dioxide data"
+"0","pathcsv <- system.file('external/no2.csv', package = 'gstat')"
+"0","no2.dat <- read_csv(pathcsv, show_col_types = FALSE)"
+"0","no2_sf <- st_as_sf(no2.dat, coords = c(""station_longitude_deg"", ""station_latitude_deg""), crs = st_crs(4326))  # Assuming WGS 84"
+"0","# "
+"0",""
