@@ -1,1 +1,457 @@
+---
+title: "Storyboard For Annual Rainfall"
+output: flexdashboard::flex_dashboard
+---
+Summary of the Attributes {.storyboard}
+=========================================
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+packs <- c("tidyverse", "viridis", "sf", "terra", "tidyterra", "spData", 'raster', 'gstat')
+lapply(packs, require, character.only = TRUE)
+```
+
+
+```{r read_data, message=FALSE, warning=FALSE, echo=FALSE}
+# Boundary map of study region
+border<-st_read('/cloud/project/israel/israel_borders.shp')
+
+#st_crs(border) <- 4326 
+
+#data 
+rainfall_data <- read.csv('/cloud/project/Rainfall.csv')
+
+# Convert to sf object
+rainfall_sf <- st_as_sf(rainfall_data, coords = c("x", "y"), crs=st_crs(border)) # 
+
+```
+## Summary of the Annual Rainfall {.tabset}
+```{r Summary, echo=FALSE}
+# Summary table for the 'annual' variable
+summary_table <- rainfall_data %>%
+  summarise(
+    mean = mean(annual, na.rm = TRUE),
+    median = median(annual, na.rm = TRUE),
+    sd = sd(annual, na.rm = TRUE),
+    min = min(annual, na.rm = TRUE),
+    max = max(annual, na.rm = TRUE),
+    IQR = IQR(annual, na.rm = TRUE))
+
+print(summary_table)
+# which area got the most annual rainfall 
+max_rainfall_area <- rainfall_data %>% slice(which.max(annual))
+
+print(paste("This area got the most annual rainfall:", max_rainfall_area$name))
+
+#which area got the least annual rainfall 
+min_rainfall_area <- rainfall_data %>% slice(which.min(annual))
+print(paste("This area got the least annual rainfall:", min_rainfall_area$name))
+
+
+```
+
+
+```{r Plot for Annual Rainfall, echo=FALSE}
+rainfall_data %>%
+  ggplot() +
+  geom_histogram(aes(x = annual), bins = 50, fill = "blue", alpha = 0.7) +
+  labs(
+    title = 'Histogram of the Distribution of Annual Rainfall in cm',
+    x = 'Annual Rainfall in CM',
+    y = 'Frequency'
+  ) +
+  theme_minimal()
+
+
+```
+
+***
+The summary statistics for annual rainfall (in centimeters) and the histogram of the annual rainfall indicate a mean of approximately 498.50 cm and a median of 527.60 cm, suggesting a left-skewed distribution influenced by lower rainfall years. The standard deviation of 168.09 cm reflects significant variability, highlighting the potential for both drought and excessive rainfall. The data range from a minimum of 24 cm to a maximum of 956.60 cm, illustrating the extremes in weather patterns. The interquartile range (IQR) of 177.10 cm signifies notable variation in typical annual rainfall.
+
+IDW Method {.storyboard}
+=========================================
+
+### Plot before Interpolation
+```{r plot, fig.align='center', echo=FALSE, fig.width=6, fig.height=6}
+p0 <- ggplot(data = border) + 
+  geom_sf() + # First layer
+  geom_sf(data = rainfall_sf, aes(col =annual), size = 0.5) + 
+  scale_color_viridis_c(option="A") + 
+  theme_bw() +
+  labs(title = "Annual Rainfall Per CM",
+       y = "Latitude",
+       x = "Longitude")
+p0
+
+```
+
+***
+The color gradient indicates the amount of rainfall, with darker shades representing higher precipitation and lighter shades indicating lower rainfall. Based on the map, it appears that:Northern area receives the highest amount of rainfall, with a significant portion of the region receiving over 750 cm of annual rainfall.
+Southern area experiences considerably lower rainfall, with many areas receiving less than 250 cm per year.
+The coastal region receives moderate rainfall, with annual precipitation typically ranging between 250 and 500 cm.
+
+
+```{r Interpolation, echo=FALSE}
+# Create a grid for interpolation
+grid <- rast(border, nrows = 100, ncol = 100) 
+
+# Extract the coordinates of all cells
+xy <- as.data.frame(raster::xyFromCell(grid, 1:ncell(grid)))
+
+# Create prediction locations as sf object
+pred_locations <- st_as_sf(xy, coords = c('x', 'y'), crs = st_crs(border))
+
+# Trim grid to study region
+pred_locations <- st_filter(pred_locations, border)
+
+# Ensure that pred_locations and rainfall_sf have the same CRS
+pred_locations <- st_transform(pred_locations, crs = st_crs(rainfall_sf))
+
+
+```
+### IDW with power 0
+
+```{r IDW with power 0 , echo=FALSE}
+
+idw_0 <- gstat::gstat(formula = annual ~ 1, 
+                      locations = rainfall_sf, 
+                      nmax = nrow(rainfall_sf),  # Use all available neighbors
+                      set = list(idp = 0))   # Power = 0
+
+# Perform interpolation for Power = 0
+idw_sf_0 <- raster::predict(idw_0, pred_locations)
+
+# Convert interpolated results to a data frame and extract coordinates
+idw_sf_0 <- idw_sf_0 %>%
+  mutate(x = st_coordinates(idw_sf_0)[, 1],
+         y = st_coordinates(idw_sf_0)[, 2],
+         pred.annualRain = var1.pred)
+
+# Plot results for Power = 0
+p_0 <- ggplot(idw_sf_0) + 
+  geom_sf(data = border, fill = "blue", color = "black") +  
+  geom_sf(aes(col = pred.annualRain), size = 0.5) + 
+  scale_color_viridis_c(option = "A") + theme_bw() +
+  labs(title = "IDW Interpolation with Power = 0",
+       y = "Latitude",
+       x = "Longitude",
+       color = "Predicted Annual Rainfall")
+
+# Print the plot for Power = 0
+print(p_0)
+
+
+```
+
+***
+The IDW interpolation with a power of 0 is very smooth and gives the mean annual rainfall for all areas 
+
+
+### IDW with power 1
+```{r IDW with power 1, fig.align='center', echo=FALSE}
+# Define IDW model for Power = 1
+idw_1 <- gstat::gstat(formula = annual ~ 1, 
+                      locations = rainfall_sf, 
+                      nmax = nrow(rainfall_sf), 
+                      set = list(idp = 1))   # Power = 1
+
+# Perform interpolation for Power = 1
+idw_sf_1 <- raster::predict(idw_1, pred_locations)
+
+# Convert interpolated results to a data frame and extract coordinates
+idw_sf_1 <- idw_sf_1 %>%
+  mutate(x = st_coordinates(idw_sf_1)[, 1],
+         y = st_coordinates(idw_sf_1)[, 2],
+         pred.annualRain = var1.pred)
+
+# Plot results for Power = 1
+p_1 <- ggplot(idw_sf_1) + 
+  geom_sf(data = border, fill = "blue", color = "black") +  
+  geom_sf(aes(col = pred.annualRain), size = 0.5) + 
+  scale_color_viridis_c(option = "A") + theme_bw() +
+  labs(title = "IDW Interpolation with Power = 1",
+       y = "Latitude",
+       x = "Longitude",
+       color = "Predicted Annual Rainfall")
+
+# Print the plot for Power = 1
+print(p_1)
+
+```
+
+***
+the IDW interpolation with a power of 1 offers a more  informative representation of the predicted annual rainfall than power zero which shows that all areas have the same amount of annual rainfall. The map shows most of the areas received an annual rainfall above 300cm. The map though smooth reveals gradual changes in rainfall intensity across the region, with gradients from wetter areas in the north to drier areas in the south.
+
+### IDW with power 2
+```{r IDW with power 2, fig.align='center', echo=FALSE}
+
+# Define IDW model for Power = 2
+idw_2 <- gstat::gstat(formula = annual ~ 1, 
+                      locations = rainfall_sf, 
+                      nmax = nrow(rainfall_sf), 
+                      set = list(idp = 2))   # Power = 2
+
+# Perform interpolation for Power = 2
+idw_sf_2 <- raster::predict(idw_2, pred_locations)
+
+# Convert interpolated results to a data frame and extract coordinates
+idw_sf_2 <- idw_sf_2 %>%
+  mutate(x = st_coordinates(idw_sf_2)[, 1],
+         y = st_coordinates(idw_sf_2)[, 2],
+         pred.annualRain = var1.pred)
+
+# Plot results for Power = 2
+p_2 <- ggplot(idw_sf_2) + 
+  geom_sf(data = border, fill = "blue", color = "black") +  
+  geom_sf(aes(col = pred.annualRain), size = 0.5) + 
+  scale_color_viridis_c(option = "A") + theme_bw() +
+  labs(title = "IDW Interpolation with Power = 2",
+       y = "Latitude",
+       x = "Longitude",
+       color = "Predicted Annual Rainfall")
+
+# Print the plot for Power = 2
+print(p_2)
+
+```
+
+***
+The IDW interpolation with a power of 2 exhibits less smoothness and reveals distinct trends compared to the interpolation with power 1. In the southern region, areas now appear darker, indicating annual rainfall levels below 200 cm, which suggests a decrease in rainfall compared to the power 1 interpolation. While the northern areas continue to receive more rainfall, the amounts are still lower than those predicted with power 1. Notably, the regions experiencing the highest annual rainfall are concentrated in the north westernmost areas which agrees with the orginal data as the points in those areas were very light. The tip of the south gets less more than 400cm annual rainfall rain than the tip of the north
+
+
+### CROSS-VALIDTION 
+```{r Cross-validation, echo=FALSE}
+
+set.seed(7515)
+
+# Split the data into 5 folds
+k = 5
+folds <- caret::createFolds(rainfall_data$annual, k = k) 
+
+# Vectors to store the RMSE values obtained with each method
+rmse1 <- rep(NA, k) # power 0
+rmse2 <- rep(NA, k) # power 1
+rmse3 <- rep(NA, k) # power 2
+
+for(i in 1:k) {
+  # Split the data into training and test sets
+  test <- rainfall_sf[folds[[i]], ]
+  train <- rainfall_sf[-folds[[i]], ]
+
+  # IDW: power 0 
+  idw <- gstat::gstat(formula = annual ~ 1, locations = train, 
+                      nmax = nrow(train), set = list(idp = 0))
+  p1 <- raster::predict(idw, test)$var1.pred
+  rmse1[i] <- ModelMetrics::rmse(test$annual, p1)
+
+  # IDW: power 1 
+  idw2 <- gstat::gstat(formula = annual ~ 1, locations = train, 
+                       nmax = nrow(train), set = list(idp = 1))
+  p2 <- raster::predict(idw2, test)$var1.pred
+  rmse2[i] <- ModelMetrics::rmse(test$annual, p2)
+
+  # IDW: power 2
+  idw3 <- gstat::gstat(formula = annual ~ 1, locations = train, 
+                       nmax = nrow(train), set = list(idp = 2))
+  p3 <- raster::predict(idw3, test)$var1.pred
+  rmse3[i] <- ModelMetrics::rmse(test$annual, p3)
+}
+
+# RMSE over the k folds
+RMSE <- data.frame(idw = rmse1, idw2 = rmse2, idw3 = rmse3)
+
+# Average RMSE over the k folds
+avg.RMSE <- data.frame(idw = mean(rmse1), idw2 = mean(rmse2), idw3 = mean(rmse3))
+
+# Average RMSE over the k folds
+avg.RMSE <- data.frame(
+  `IDW (power = 0)` = mean(rmse1),
+  `IDW (power = 1)` = mean(rmse2),
+  `IDW (power = 2)` = mean(rmse3)
+)
+
+# Print the average RMSE for each IDW power
+print(avg.RMSE)
+
+```
+***
+The IDW results for the different power coefficients show distinct variations in estimated annual rainfall. For a power of 0, the average rainfall estimate is 166.34 cm, which indicates that the interpolation is uniform across the area, treating all points equally without considering their distance. As the power increases to 1, the average estimate drops to 127.52 cm, reflecting a moderate weighting of nearby points over those further away. Finally, at a power of 2, the average estimate further decreases to 85.04 cm, suggesting that the interpolation is heavily influenced by the nearest points, resulting in a more localized and potentially less smooth surface.
+
+
+### Bubble Plots for IDW with power=0 
+
+```{r Bubble Plot for power 0, echo=FALSE}
+#bubble plot for IDW
+
+idw.df <- raster::predict(idw, rainfall_sf)
+
+idw.df$name<-rainfall_sf$name
+#view(rainfall_sf)
+
+idw.df2 <- left_join(
+  st_drop_geometry(idw.df),   # Drop geometry from idw.df
+  st_drop_geometry(rainfall_sf)) %>% 
+  mutate(residual = annual - var1.pred)
+
+bubble1 <- idw.df2 %>%
+  ggplot(aes(x = annual, y = var1.pred, colour = residual)) +
+  geom_point(alpha = 0.5)+
+  scale_color_viridis(option = 'A') +
+  theme_bw() +
+  labs(title = "Inverse Distance Weighting\n Residual Plot for power =0",
+       y = "Predicted annual Rain",
+       x = "Observed annual Rain ",
+       colour = "Residual")
+
+print(bubble1)
+
+```
+
+***
+The points along the line are shaded darker, indicating they are farther from a residual of zero. Additionally, many points are located well above and below the line, suggesting the model tends to underestimate higher rainfall values and overestimate lower ones. This highlights areas where the model's predictions diverge significantly from the actual data.
+
+### Bubble plot for IDW power=1
+
+```{r Bubble Plot for power 1, echo=FALSE}
+
+idw.df1 <- raster::predict(idw2, rainfall_sf)
+
+idw.df1$name<-rainfall_sf$name
+
+idw.df2_1 <- left_join(
+  st_drop_geometry(idw.df1),   # Drop geometry 
+  st_drop_geometry(rainfall_sf)) %>% 
+  mutate(residual = annual - var1.pred)
+
+bubble2 <- idw.df2_1 %>%
+  ggplot(aes(x = annual, y = var1.pred, colour = residual)) +
+  geom_point(alpha = 0.5)+
+  scale_color_viridis(option = 'A') +
+  theme_bw() +
+  labs(title = "Inverse Distance Weighting\n Residual Plot for power =1",
+       y = "Predicted annual Rain",
+       x = "Observed annual Rain ",
+       colour = "Residual")
+
+print(bubble2)
+
+```
+
+***
+The points are mostly scattered around the diagonal line, indicating that the predicted annual rainfall values are generally close to the observed values.The color of the dots on the line indicates that the residual are close to zero which indicates that model predicts annual rainfall well.However, few points are located farther away from the diagonal line indicating larger differences between predicted and observed values.The residual range from -200 to 200 which is different from the range of the residuals of the model with power 0
+
+
+### Bubble plot for IDW with power=2
+```{r Bubble plot for IDW with power 2, echo=FALSE}
+# for power=2
+idw.df_2 <- raster::predict(idw3, rainfall_sf)
+
+idw.df_2$name<-rainfall_sf$name
+
+idw.df2_2 <- left_join(
+  st_drop_geometry(idw.df_2),   # Drop geometry from idw.df
+  st_drop_geometry(rainfall_sf)) %>% 
+  mutate(residual = annual - var1.pred)
+
+bubble3 <- idw.df2_2 %>%
+  ggplot(aes(x = annual, y = var1.pred, colour = residual)) +
+  geom_point(alpha = 0.5)+
+  scale_color_viridis(option = 'A') +
+  theme_bw() +
+  labs(title = "Inverse Distance Weighting\n Residual Plot for power=2",
+       y = "Predicted annual Rain",
+       x = "Observed annual Rain ",
+       colour = "Residual")
+print(bubble3)
+
+```
+
+***
+For the IDW interpolation with a power of 2, most points along the diagonal are shaded like the shades around zero, indicating that their residuals are close to zero, which suggests the model is performing well in predicting annual rainfall. However, there are a few points that deviate from the line. The lightly shaded points below the line indicate the model is underestimating rainfall in those areas, while the darker points above the line show overestimation. Most of these points are still very close to the diagonal, meaning the deviations are relatively small, overall reflecting a good model fit.The range for the residuals for this model is 100 points less than that of the model with power 0 and 1
+
+
+Kriging Method {.storyboard} 
+=========================================
+
+### Before Interpolation 
+```{r, echo=FALSE}
+print(p0)
+```
+
+### Interpolation
+
+```{r Kriggin, fig.align='center', echo=FALSE}
+
+# Calculate the sample variogram for annual rainfall
+s.vgram <- variogram(annual ~ 1, data = rainfall_sf)
+
+# Plot the sample variogram
+#plot(s.vgram, main = "Sample Variogram", xlab = "Distance", ylab = "Semi-Variance")
+ #List all available variogram models
+#vgm()
+
+# Visualize all available variogram models
+#show.vgms(par.strip.text = list(cex = 0.75))
+
+# Autofit the variogram model to the data
+f.vgram <- automap::autofitVariogram(annual ~ 1, as(rainfall_sf, "Spatial"))
+
+# Plot the fitted variogram model
+#plot(f.vgram)
+
+# Display the fitted variogram model parameters
+#f.vgram$var_model
+
+# Apply the Kriging weights to the known data values at the sample locations
+k.samp <- gstat(formula = annual ~ 1,
+                 data = rainfall_sf,
+                 model = f.vgram$var_model)
+
+# Interpolating the surface using the fitted variogram
+krige.pred <- predict(k.samp, pred_locations)
+
+# Plot the predictions
+p3 <- krige.pred %>% 
+  ggplot() +
+  geom_sf(aes(color = var1.pred)) +
+  scale_color_viridis(option = "A") + 
+  theme_bw() +
+  labs(title = "Interpolated Surface",
+       y = "Latitude",
+       x = "Longitude",
+       col = "Annual Rainfall")
+print(p3)
+
+```
+
+### Kriggin Cross Validation
+
+```{r Kriggin Cross Validation, echo=FALSE}
+# Set seed for reproducibility
+set.seed(7515)
+
+# Perform cross-validation
+cross.valid <- gstat.cv(k.samp, nfold = 5)
+
+# Prepare the data for RMSE calculation
+cv.df <- cross.valid@data[, c('observed', 'var1.pred', 'residual')]
+
+# Calculate RMSE
+rmse <- cv.df %>%
+  summarise(RMSE = sqrt(sum((var1.pred - observed)^2) / n()))
+
+print(rmse)
+```
+
+***
+RMSE= 64.9cm which is less than the RMSE of the IDW with different powers.
+
+Commentary {.storyboard} 
+=========================================
+
+The analysis of annual rainfall across the region provided significant insights through the application of both IDW (Inverse Distance Weighting) and Kriging interpolation methods. The IDW method was applied with varying power coefficients (0, 1, and 2) to assess how spatial weighting affects rainfall estimation. Summary statistics showed that annual rainfall varied widely, with values ranging from a minimum of 24 cm to a maximum of 956.60 cm, indicating diverse climatic conditions within the area.
+
+The IDW interpolation with a power of 0 resulted in a uniform rainfall estimate, failing to capture local variability, resulting in an RMSE of 166.34 cm. With power 1, the IDW method provided a less smooth map, revealing gradual spatial changes in annual rain, but still produced a higher RMSE of 127.52cm. Power 2 further highlighted distinctions between areas, particularly illustrating the stark contrast between the southern and northern regions of the study area(northern areas received more annual rainfall than the south did), yielding an RMSE of 85 cm. Thus the IDW with power 2, did a better job at predicting annual rainfall.
+
+However, the cross-validation results highlighted the superior performance of the Kriging method in estimating rainfall. With the lowest RMSE of 64.9cm. Based on the Root Square Mean Error(RMSE), Kriging demonstrated a more accurate representation of spatial rainfall patterns compared to all IDW configurations. This method effectively accounts for both the distance and the spatial correlation between points, leading to improved predictions that are not only more precise but also better at capturing the underlying rainfall variability across the region.
 
