@@ -1,0 +1,56 @@
+Introduction
+
+This study investigates the relationship between health insurance rates and cancer prevalence in the Greater Boston Area (GBA) between 2015 and 2019.
+Prior research has demonstrated disparities in cancer outcomes based on insurance status and type, with uninsured individuals often facing delayed diagnoses and worse outcomes compared to those with private insurance. 
+Massachusetts’ universal health insurance mandate offers a unique environment to explore how these dynamics play out in a region where over 97% of the population is insured.
+By analyzing data from the CDC PLACES dataset and Census Bureau’s health insurance estimates, this study builds on existing research to provide insights into how various types of health insurance correlate with cancer prevalence rates in the GBA.
+
+
+Methodology
+Datasets
+1:CDC PLACES Dataset (2015–2019):
+Provided cancer prevalence estimates for census tracts.
+Five-year average cancer prevalence rates were calculated for consistency.
+
+2:Census Bureau’s Five-Year Health Insurance Estimates (2015–2019):
+Contained detailed information on health insurance types, including Medicare, Medicaid, TRICARE, and employer-based insurance.
+Focused on individuals aged 19 and older.
+
+Study Area
+Defined as the Boston-Cambridge-Newton Metropolitan Statistical Area (BOS-CAM-NEW MSA).
+Included census tracts from Boston, Cambridge, Lawrence, Lowell, Lynn, Newton, Quincy, and Somerville.
+
+Analysis
+
+Merged datasets by census tract, resulting in a final sample of 350 tracts.
+Conducted Ordinary Least Squares (OLS) regression with the five-year average cancer prevalence rate as the dependent variable and insurance type rates as independent variables.
+Performed model diagnostics to ensure validity (e.g., tests for normality and homoscedasticity).
+
+Results
+
+Trends in Health Insurance Coverage (2015–2019)
+Employer-based Insurance: Increased until 2018, followed by a slight decline.
+Direct Purchase Plans: Gradually increased.
+Public Programs: Medicare, Medicaid, TRICARE, and VA Health Care remained steady.
+
+Cancer Prevalence: Most census tracts reported rates between 4% and 8%, with a few outliers.
+
+                                                
+Linear Regression Analysis
+
+Medicare rate exhibited a statistically strong positive correlation (0.53) with cancer prevalence.
+Direct purchase plans showed a moderate negative correlation (-0.4) with cancer prevalence.
+Employer-based insurance, Medicaid, TRICARE, and VA Health Care showed weaker or non-significant correlations.
+
+OLS Model Findings
+
+Adjusted R-squared: 0.422, indicating that 42.2% of variance in cancer prevalence is explained by the model.
+
+Statistically Significant Relationships:
+
+Medicare (positive): Coefficient = 28.76, p-value < 0.00001.
+Direct Purchase (negative): Coefficient = -7.01, p-value = 0.008.
+Non-Significant Relationships: Medicaid, TRICARE, and VA Health Care.
+Model Significance: F-statistic = 43.15, confirming the model’s overall explanatory power.
+
+                                                
