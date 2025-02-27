@@ -1,0 +1,195 @@
+---
+title: "N_Abdirahman"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    theme: 
+      version: 4
+      bootswatch: minty
+    
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+packs <- c('tidyverse', 'sf', 'spatstat', 'viridis', 'gridExtra', 'rnaturalearthdata', 'rnaturalearth')
+lapply(packs, require, character.only = TRUE)
+```
+
+
+```{r Data, echo=FALSE}
+# Data preparation
+fires <- rescale(nbfires, 0.403716) # Convert to kilometers
+fires_split <- split.ppp(fires, 'year') # Split data by year
+
+# Extract data for 1990 and 1995
+ppp1990 <- fires_split[['1990']]
+ppp1995 <- fires_split[['1995']]
+
+# Convert to sf objects
+df1990 <- data.frame(x = ppp1990$x, y = ppp1990$y, fire.type = marks(ppp1990)$fire.type)
+sf1990 <- st_as_sf(df1990, coords = c('x', 'y'))
+
+df1995 <- data.frame(x = ppp1995$x, y = ppp1995$y, fire.type = marks(ppp1995)$fire.type)
+
+sf1995 <- st_as_sf(df1995, coords = c('x', 'y'))
+
+```
+
+# Introduction {.storyboard}
+
+
+```{r Plot, echo=FALSE}
+# side-by-side maps
+
+p1990 <- sf1990 %>%
+  ggplot() +
+  geom_sf(aes(colour = fire.type), size = 1, shape = 17) +
+  scale_colour_viridis_d() +
+  theme_minimal() +
+  labs(title = 'Fires in New Brunswick (1990)', colour = 'Fire Type')
+
+p1995 <- sf1995 %>%
+  ggplot() +
+  geom_sf(aes(colour = fire.type), size = 1, shape = 17) +
+  scale_colour_viridis_d() +
+  theme_minimal() +
+  labs(title = 'Fires in New Brunswick (1995)', colour = 'Fire Type')
+
+grid.arrange(p1990, p1995, ncol = 2) 
+```
+
+***
+This storyboard examines Complete Spatial Randomness (CSR) of fires in New Brunswick, Canada, with a focus on the years 1990 and 1995. The analysis employs both density-based methods (specifically, a local density test using quadrats) and distance-based methods (using a K-function) to evaluate fire patterns and determine whether their spatial distributions are random, clustered, or uniform. The study includes visualizations and hypothesis testing to support the findings.
+
+The plots:
+
+Both years exhibit a diverse range of fire types, with forest fires dominating, followed by grass fires, and fewer dump and other fires. However, a notable difference emerges in the density of fire incidents. The 1995 plot displays a significantly higher concentration of fire points compared to 1990. 
+
+In terms of spatial distribution, 1990's fires were primarily concentrated in the eastern, central-eastern, and southern regions. While 1995 also saw fires in these areas, the overall distribution was more dispersed, with fewer empty spaces indicating a wider spread of fire activity. 
+
+Additionally, the 1995 plot extends further along the x-axis, suggesting an increase in the geographic range of recorded fires. The prominence of specific fire types, particularly forest fires, seems more pronounced in 1995. 
+
+
+
+
+
+
+# Density Based Analysis {.storyboard}
+
+
+### Local Quadrat Density Analysis Results
+
+```{r Density Based Analysis, echo=FALSE}
+
+# Quadrat Test for CSR
+quad1990 <- quadratcount(ppp1990, nx = 4, ny = 4) # CAN CHANGE HERE
+quad1995 <- quadratcount(ppp1995, nx = 4, ny = 4)
+
+test1990 <- quadrat.test(quad1990, alternative = 'two.sided')
+test1995 <- quadrat.test(quad1995, alternative = 'two.sided')
+
+
+```
+A local quadrat density test was conducted to assess the spatial pattern of fires in New Brunswick for both 1990 and 1995. The null hypothesis was that the fires exhibited a Complete Spatial Randomness (CSR) pattern, while the alternative hypothesis was that the pattern was either clustered or uniform. The significance level (α) was set at 0.05. 
+
+1990:
+Point Estimate:chi = 83.204 (χ²~χ²_df = 13)
+Two-sided P-value < 0.0001
+
+Since this p_value is<0.05, the null hypothesis is rejected. Thus,the spatial distribution of fires in 1990 was not random and had a clustered or uniform pattern.
+
+1995:
+Point Estimate: chi = 136.35 ((χ²~χ²_df = 13)
+Two-sided P-value < 0.0001
+
+Similar to 1990, the extremely low p-value indicates strong evidence against the null hypothesis. Thus, the spatial distribution of fires in 1995 was also not random and likely exhibited a clustered or uniform pattern. 
+
+
+
+
+
+### Density Plots
+
+```{r Density Plots, echo=FALSE}
+
+# side by side plots 
+par(mfrow = c(1, 2)) 
+
+# Calculate intensity ranges
+zlim_range <- range(c(intensity(quad1990), intensity(quad1995)))
+
+# Plot for 1990
+plot(intensity(quad1990, image = TRUE),
+     zlim = zlim_range,
+     main = 'Intensity 1990', las = 1,
+     col = viridis_pal(direction = -1)(256))
+
+# Add points to the raster plot
+plot(ppp1990, pch = 17, cex = 0.5, add = TRUE)
+
+# Plot for 1995
+plot(intensity(quad1995, image = TRUE),
+     zlim = zlim_range,
+     main = 'Intensity 1995', las = 1,
+     col = viridis_pal(direction = -1)(256))
+
+plot(ppp1995, pch = 17, cex = 0.5, add = TRUE)
+
+```
+
+***
+In 1990, the density which is the estimator of intensity is highest (darker purple zones) in the northeastern region, east and a few areas in the south, indicating areas with stronger activity or higher levels of the phenomenon. Conversely, lower-intensity areas (yellow-green zones) are spread across the western, central and southern regions. 
+By 1995, the density patterns shifted slightly. The map in general looks less yellow and more green. The western, central and southern areas that were yellow in 1990, have turned green or darker yellow indicating increase in fire occurrences.
+Furthermore, the 1995 map suggests a random distribution across quadrats compared to 1990 which has a more aggregated pattern.
+
+
+
+# Distance-Based Analysis {.storyboard} 
+
+```{r Distance-Based Analysis, echo=FALSE}
+
+## Distance-Based Analysis
+# K-Function Analysis
+
+k1990 <- Kest(ppp1990, correction = 'best')
+k1995 <- Kest(ppp1995, correction = 'best')
+
+
+# Side-by-side K-function plots
+
+par(mfrow = c(1, 2))
+
+plot(k1990,
+     main = 'K-Function 1990',
+     las = 1,
+     legendargs = list(cex = 0.4, xpd = TRUE, inset = c(0.9, 0)))
+
+plot(k1995,
+     main = 'K-Function 1995',
+     las = 1,
+     legendargs = list(cex = 0.4, xpd = TRUE, inset = c(0.9, 0)))
+
+
+
+```
+
+***
+A K-function distance analysis was conducted to further investigate the spatial pattern of fires in New Brunswick for both 1990 and 1995.
+
+The null hypothesis was that the fires exhibited a Complete Spatial Randomness (CSR) pattern, while the alternative hypothesis was that the fires do not exhibit a CSR pattern (i.e., they are clustered or uniformly distributed). 
+
+Results:
+
+1990:
+0-200 km: The lines of the K_pois function and the Estimated K-function are on top of each.
+
+Thus, since the K_poiss(theoretical k function) equals the Estimated K-function, there is evidence for Complete Spatial Randomness (CSR) at these distances. 
+
+Greater than 200 km: Since the Estimated K-function > K_pois(theoretical k function), there is evidence for clustering at these distances. This implies that fires at distances greater than 20 km may have influenced the occurrence of other fires. 
+
+1995:
+At all distances,The lines of the K_pois function and the Estimated K-function are on top of each
+
+Since, the estimated K-function is equal to the theoretical K-Poisson function, providing strong evidence for Complete Spatial Randomness (CSR). This suggests that the spatial distribution of fires in 1995 was random and there was no significant clustering or dispersion.
+
