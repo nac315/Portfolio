@@ -1,0 +1,270 @@
+---
+title: "PractiseExercise"
+output: html_document
+date: "2024-11-07"
+---
+
+*** 
+                                Results
+
+The analysis of the MEDV attribute, which represents the median prices of owner occupied housing in Boston in 1978 (measured in $1000 USD), reveals a range of values: the minimum price is $5000, the first quartile is $17,020, the median is $21,200, the mean is $2,2530, the third quartile is $25,000, and the maximum is $50,000. These values suggest that the majority of properties had median prices between $15,000 and $25,000, with a few areas reaching as high as $50,000.
+
+This is reflected by the distribution of the median prices as it is right skewed, as shown in Figure 1, where most of the housing prices fall between $15,000 and $25,000, and only a few areas have significantly higher values. This pattern is also reflected in Figure 2, which shows the distribution of the lagged median prices. The lagged distribution is also right skewed but has a lower median than the original, indicating that many census tracts have higher median prices than their neighboring areas.
+
+The spatial distribution of housing prices, as depicted in Figure 3, shows that the areas with the highest median prices are concentrated in the central and western parts of Boston, with median values reaching $50,000 in 1978. However, the majority of the city’s housing tracts had median prices under $30,000, with some areas even falling below $20,000. Figure 4, which displays the lagged median prices, provides a similar spatial distribution but appears less vibrant, indicating that many census tracts have relatively higher median prices compared to their neighbors. However, only a few areas stand out with significantly lower prices than their neighbors.
+
+To determine whether these trends exhibit significant spatial clustering, we applied the Global Moran's I test. The null hypothesis (H₀) posits no spatial autocorrelation, meaning any observed clustering would be due to random variation, while the alternative hypothesis (Hₐ) suggests positive spatial autocorrelation, indicating that counties with similar smoking rates tend to cluster. Using a significance level of 0.05, we calculated a Global Moran's I statistic of 0.6267(~N(0,1)) and a p value of 2.2e16. Since this p value is less than 0.05, we rejected the null hypothesis in favor of the alternative. Thus, there is evidence for a positive spatial autocorrelation among median housing prices of owner occupied housing in Boston in 1978 , meaning that census tract areas with similar median housing prices are geographically closer to each other than would be expected by chance.
+
+Further analysis of spatial clustering, shown in Figure 5, plots the spatially lagged scaled median prices against the scaled median prices. Most data points fall within the low-low and high-high quadrants, suggesting the presence of clustering. Figure 6 maps these quadrants and reveals that high-high clustering dominates, though low-high clustering is more common than low-low clustering. This suggests that high-priced areas are often surrounded by other high-priced areas, while areas with lower prices are often adjacent to other lowerpriced areas.
+
+Focusing on Figure 7, which zooms in on census tract 3335 and its neighbors, we can see that this tract and its surrounding areas generally have median prices around $20,000, with one neighbor priced slightly higher. However, the clustering patterns in Figure 6 reveal a more complex picture. The southern neighbors of tract 3335 show low-high clustering, while the western neighbor exhibits low-low clustering. In contrast, the eastern neighbors display both high-high and high-low clustering patterns, indicating a more varied relationship between tract 3335 and its surroundings.
+
+When looked into whether the clusters or the dispersions seen in Figure 6 are statistically significant, the local Moran’s I p value map in Figure 8 highlights areas of statistically significant clustering or dispersion. Most areas show no significant autocorrelation, but regions with high-high clustering such as some of the neighborhoods with the highest observed median prices are evident. Interestingly, an outlier in the northern tip of Boston is reported as a high-high cluster, even though this area has lower median prices than its neighboring areas, as shown in Figure 3. This anomaly is confirmed by Figure 4, where the northern area appears brighter, indicating that the lagged median prices are higher than the actual median prices, suggesting a deviation from the surrounding census tracts. In addition, there are some areas in the central east with significant low-low clustering, as well as a few areas with low-high clustering. Census tract 3335 and its neighbors show no significant autocorrelation in this analysis.
+
+After adjusting for multiple comparisons using the FDR method, as shown in Figure 9, the outlier in the northern tip is no longer statistically significant. The high-high clustering areas shrink slightly, but, as in Figure 8, the majority of areas do not show significant spatial autocorrelation. The areas with the highest median housing prices remain the most clustered, while a handfull of areas show low-low clustering and low-high clustering.
+
+                                Discussion
+
+The clustering of housing prices in Boston reveals that neighborhoods with similar characteristics are often located near each other. This clustering likely results from a combination of economic and social factors. Expensive areas, such as the central and western parts of the city, may be shaped by factors like wealth, access to jobs, education, and better infrastructure. Conversely, more affordable areas may be less developed or lack amenities, leading to lower demand for housing.
+
+However, there are some limitations to this analysis. The data, being from 1978, doesn't account for more recent factors, and it can't be used to generalize current housing prices in Boston. Since 1978, housing prices in the city have significantly increased, and areas that were once more affordable may have changed due to gentrification and other urban developments. 
+
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+remove(list=ls())
+cat('\014')
+
+# Load packages
+packs <- c("tidyverse", "sf", "spdep", "sfdep", "spData", "gridExtra", "viridis") 
+lapply(packs, require, character.only = TRUE)
+```
+
+###Load data
+```{r data, echo=FALSE}
+pathshp <- system.file('shapes/boston_tracts.shp',package = 'spData')
+boston.sf <- st_read(pathshp, quiet = TRUE)
+
+boston.sf <- st_as_sf(boston.sf, coords=c('X','Y'), crs=2835)
+
+# Define spatial neighbors using queen contiguity
+contiguity.nb <- poly2nb(boston.sf, queen = TRUE)  #
+
+# Create row-standardized weights
+boston.rsw <- nb2listw(contiguity.nb, style = "W")
+
+```
+
+
+### Brief summary of the HOUSING PRICE attribute 
+```{r summary, echo=FALSE}
+#Brief summary of the MEDV attribute
+summary(boston.sf$MEDV)
+```
+
+###Plots of the distribution of a) the attribute and b) the lagged attribute
+```{r, echo=FALSE}
+#histogram of the distribution of smoking 
+Figure1<-boston.sf %>% 
+  ggplot(aes(x =MEDV)) +
+  geom_histogram(bins= 10, fill = "orange", color = "black") +
+  labs(
+    title = "Figure1: Distribution of The median prices of owner-occupied housing in $1000 USD in Boston(1978).",
+    x = "Medain Housing Prices",
+    y = "Frequency"
+  ) +
+  theme_minimal()
+
+#histrogram of the lagged smoking 
+boston.sf <- boston.sf %>%
+  mutate(
+    nb = st_contiguity(geometry, queen = FALSE),
+    wt = st_weights(nb, style = "W"),
+    MEDV_lag = st_lag(MEDV, nb, wt)
+  )
+
+
+Figure2<- boston.sf %>% 
+  ggplot(aes(x = MEDV_lag)) + 
+  geom_histogram(bins = 10, color = "black", fill = "orange") + 
+  theme_bw() + 
+  labs(
+    x = "Median Housing Price lagged", 
+    y = "Frequency", 
+    title = "Figure2:Distribution of Lagged median prices of owner-occupied housing in $1000 USD in Boston(1978)"
+  )
+grid.arrange(Figure1, Figure2)
+```
+
+### Maps of a) the attribute and b) the lagged attribute
+
+```{r MAPS, echo=FALSE}
+# Map of the observed smoking rates 
+Figure3 <- boston.sf %>% 
+  ggplot(aes(fill = MEDV)) +  
+  geom_sf(color = 'black', lwd = 0.15) +
+  scale_fill_gradient(low = "blue", high = "red", limits = range(boston.sf$MEDV)) +
+  theme_minimal() +
+  labs(
+    title = 'Figure3:median prices of owner-occupied housing in $1000 USD in Boston(1978) in $1000 USD',  
+    x = "Longitude", 
+    y = "Latitude"
+  )
+
+# 
+Figure4 <- boston.sf %>% 
+  ggplot(aes(fill = MEDV_lag)) +  
+  geom_sf(color = 'black', lwd = 0.15) +
+  scale_fill_gradient(low = "blue", high = "red", limits = range(boston.sf$MEDV_lag)) +
+  theme_minimal() +
+  labs(
+    title = 'Figure4:Lagged median prices of owner-occupied housing in $1000 USD in Boston(1978) in $1000 USD',  
+    x = "Longitude", 
+    y = "Latitude"
+  )
+
+grid.arrange(Figure3, Figure4)
+
+```
+### Global Moran's I test: Annalytical approach: p-value 
+```{r, message=FALSE,echo=FALSE}
+# global Moran's 
+gmoran <- moran.test(boston.sf$MEDV, boston.rsw, 
+                     alternative = 'greater') #  Test for clustering
+
+
+# Plot of the G Moran's
+boston.sf <- boston.sf %>%
+  mutate(sMEDV = scale(MEDV),
+         sLag = scale(MEDV_lag),
+         quadrant =
+           case_when(sMEDV >= 0 & sLag >= 0 ~ "High-High", # top right quadrant
+                     sMEDV> 0 & sLag <= 0 ~ "High-Low", # bottom right quadrant
+                     sMEDV <= 0 & sLag >= 0 ~ "Low-High",
+                     sMEDV <= 0 & sLag <= 0 ~ "Low-Low"))
+
+pal <- c('red', 'lightpink', 'lightblue','blue','lightgrey')
+
+Figure5 <- boston.sf %>% ggplot(aes(y = sLag, x = sMEDV)) + # we scaled the values so the mean is 0 (changed into z-score)
+  geom_point(size = 0.75, aes(color = quadrant)) +
+  scale_color_manual(values = pal) +
+  geom_smooth(method = "lm", se = FALSE, lwd = 0.25, col = "orchid") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey", linewidth = 0.25) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey", linewidth = 0.25) +
+  theme_classic() +
+  labs(x = "Observed Median prices",
+       y = "Spatially Lagged Median price",
+       title = "Figure5:Spatially Lagged MEDV vs MEDV (Scaled)")
+
+ 
+# 
+#Map of the quadrants based on the lagged and smoke 
+pal <- c('red', 'lightpink', 'lightblue', 'blue')
+Figure6 <- boston.sf %>% ggplot(aes(fill = quadrant)) +
+  geom_sf(color = "black", lwd = 0.15) +
+  scale_fill_manual(values = pal) +
+  theme_bw() +
+  labs(x = "Longitude",
+       y = "Latitude",
+       title = " Figure6:Map of the quadrants") 
+
+
+grid.arrange(Figure5, Figure6)
+
+```
+### poltract 3335
+
+```{r,poltract 3335, echo=FALSE}
+
+# Identify poltract 3335 and assign neighbor labels
+poltract_id <- 3335
+boston.sf$neighbors <- "Other"
+
+boston.sf$neighbors[boston.sf$poltract == poltract_id] <- "Area"
+
+# Label neighbors of poltract 3335
+neighbor_ids <- contiguity.nb[[which(boston.sf$poltract == poltract_id)]]
+
+boston.sf$neighbors[neighbor_ids] <- "Neighbors"
+
+# Plot the area and its neighbors
+Figure7 <- boston.sf %>%
+  ggplot(aes(fill = neighbors)) +
+  geom_sf(color = "black", lwd = 0.15) +
+  scale_fill_manual(values = c("orchid", "gray", "white")) +
+  theme_minimal() +
+  labs(
+    x = "Longitude",
+    y = "Latitude",
+    title = "Figure7:Map of Poltract 3335 and Its Neighbors in Boston"
+  )
+
+Figure7
+
+```
+
+
+### Local Moran's I test: simulation-based approach
+```{r Local Moran, echo=FALSE}
+# Local Moran's  simulation-based approach
+set.seed(2024)
+lmoranMC <-  localmoran_perm(boston.sf$MEDV, boston.rsw, nsim = 999, alternative = "greater")
+ 
+# Define hotspots in penn.sf object
+boston.sf <- boston.sf %>%
+  mutate(Ii = hotspot(lmoranMC, Prname = "Pr(folded) Sim", cutoff = 0.05, p.adjust = "none")) #correcting for multiple comparisons
+
+# Replace NA with 'Non-significant'.
+boston.sf$Ii<-factor(boston.sf$Ii, 
+                       exclude=NULL,
+                       levels=c(levels(boston.sf$Ii), NA),
+                       labels=c(levels(boston.sf$Ii), 'Non-significant'))
+
+# Map significant clusters based 
+
+pal3<-c('blue', 'lightblue','red', 'lightgray')
+
+Figure8 <-boston.sf %>% ggplot(aes(fill=Ii))+
+  geom_sf(color='black', lwd=0.15)+
+  scale_fill_manual(values=pal3)+
+  theme_bw()+
+  labs(x='Longitude',
+       y='Latitude',
+       title='Figure8:Simulated P-value(alpha=0.05)')
+
+Figure8
+
+```
+
+
+### FDR adjustment
+```{r FDR adjusted, echo=FALSE}
+# Local Moran's  simulation-based approach
+ 
+boston.sf <- boston.sf %>%
+  mutate(Ii_2 = hotspot(lmoranMC, Prname = "Pr(folded) Sim", cutoff = 0.05, p.adjust = "fdr")) #correcting for multiple comparisons
+
+# Replace NA with 'Non-significant'.
+boston.sf$Ii_2<-factor(boston.sf$Ii_2, 
+                       exclude=NULL,
+                       levels=c(levels(boston.sf$Ii_2), NA),
+                       labels=c(levels(boston.sf$Ii_2), 'Non-significant'))
+
+# Map significant clusters based 
+
+pal3<-c('blue', 'lightblue','red', 'lightgray')
+
+Figure9 <-boston.sf %>% ggplot(aes(fill=Ii_2))+
+  geom_sf(color='black', lwd=0.15)+
+  scale_fill_manual(values=pal3)+
+  theme_bw()+
+  labs(x='Longitude',
+       y='Latitude',
+       title='Figure9:Simulated P-value(alpha=0.05) FDR Adjusted')
+
+Figure9
+
+```
