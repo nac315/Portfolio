@@ -1,0 +1,535 @@
+---
+title: "CART/Regression"
+author: "Naima Abdirahman"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+## Loading Libraries
+
+Load the following libraries:
+
+```{r warning=FALSE, include=FALSE}
+library(rpart)
+library(rpart.plot)
+library(caTools)
+library(ROCR)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(caret)
+library(Rcpp)
+```
+
+ 
+
+# Problem 1: Linear Regression for Predicting Housing Prices in Ames, Iowa
+
+In this problem, we consider the Ames, Iowa Housing Prices dataset, which describes sales of 2,836 properties in the town of Ames, Iowa from 2006 to 2010. You will work with the dataset provided in the `AmesSales_modified.csv` file, which has been pre-processed to simplify the analysis. We started with a partially processed set available on [Github](https://github.com/mikearango/DATS_Final) and selected a few of the most relevant variables to include in our analysis. We also modified a few entries in the data.
+
+The dataset contains 12 variables, described below. The first variable is the property's sale price---which we aim to predict. The other variables describe the property details in quantitative terms (square footage, number of rooms, date of construction...etc.). There is one categorical variable, `BldgType`, which describes different types of homes (e.g. townhouse, duplex, etc.).
+
+-   **SalePrice**: the property's sale price (dollars)
+
+-   **TotalRooms**: Total number of rooms
+
+-   **Bedrooms**: \# bedrooms
+
+-   **FullBath**: Full bathrooms
+
+-   **HalfBath**: Half baths
+
+-   **LivArea**: Ground living area (sq. feet)
+
+-   **Fireplaces**: Number of fireplaces
+
+-   **GarageArea**: Size of garage (sq. feet)
+
+-   **PoolArea**: Size of pool (sq. feet)
+
+-   **YearBuilt**: Original construction date
+
+-   **YearSold**: Year Sold
+
+-   **BldgType**: Type of dwelling
+
+Let's read in the dataset first to the variable `ames` and examine the first 6 rows of this dataset with the `head` function. Run the following commands to read in the data. The first command reads in the dataset, the second command ensures that `SalePrice` is encoded as a numeric variable and not a factor variable, and the third command examines the first 6 rows of this dataset with the `head` function. 
+
+```{r}
+# Load dataset
+ames <- read.csv("AmesSales_modified.csv")
+
+# Ensure SalePrice is a numeric variable
+ames$SalePrice = as.numeric(ames$SalePrice)
+
+# View the first 6 rows of data
+head(ames)
+```
+
+## (a): Understanding the Distribution of Sale Prices 
+
+Use the `summary()` and `hist()` functions to examine the distribution of `SalePrice`.
+
+```{r}
+# Summary statistics
+summary(ames$SalePrice)
+```
+
+```{r}
+# Histogram
+hist(ames$SalePrice)
+```
+
+
+
+***:** The distribution of the SalesPrice is right skewed where majority of the houses cost below $178,009 but there are a few houses that have a very high saleprice that extend the tail.Since there are outliers extending the tail, the median is a better measure of the centeral tendency of this data *
+
+## (b): Splitting the Dataset and Training a Linear Regression Model
+
+Let's train a linear regression model to predict `SalePrice`. But first, we will perform a test/train split by randomly dividing the `ames` dataset into 70% for training and 30% for testing. The following code creates the dataframes `train` and `test`.
+
+```{r}
+# Split data
+RNGkind(sample.kind = "Rounding")
+set.seed(10)
+idx = createDataPartition(ames$SalePrice, p=0.70, list = FALSE)
+train = ames[idx, ]
+test = ames[-idx, ]
+
+mean(train$SalePrice)
+```
+
+
+
+Train a linear regression model (on the training set) to predict `SalePrice` using all the other variables.
+
+```{r}
+### YOUR CODE HERE (train a linear regression model) ###
+#mean(train$SalePrice)
+
+model=lm(SalePrice~., data=train)
+
+summary(model)
+
+
+```
+
+
+***:** The adjusted R^2 is 0.751.TotalRooms, FullBath, YearSold, and BldgType2fmCon are non significant at the 95% level*
+
+## (c): Identifying Outliers with Residual Plots
+
+**R** offers a number of functional capabilities to help assess the quality of regression models and identify potential problems with the model. For linear regression models, you can access a significant amount of information by running the `plot` function. Here `plot` does not mean plotting the regression line, rather it refers to a set of scatter-plot graphs of various objects like residuals of training data prediction values and the like.
+
+Of particular interest to us is the graph of Residuals vs Fitted values, which we can show by adding `which=1`. Run the following code (where `model` is the name of your model from (b)).
+
+```{r}
+plot(model, which=1)
+```
+
+Here we will focus on identifying outliers. Outliers can sometimes have a disproportionate effect on the regression model and lead to poor estimates of the model coefficients. The plot above shows the residuals of the SalePrice regression model (vertical axis) and the “fitted values” which are the model’s predicted values on the training set (horizontal axis). In this plot, three extreme outliers are labeled: observations “1142”, “1450”, and “2113”. These three outliers have very large negative residuals, which means that the regression model does not fit these rows well (the predicted prices are significantly higher than the actual prices).
+
+Let's print these three observations using the following commands.
+
+```{r}
+# Printing outlier observations
+outliers = c("1142", "1450", "2113")
+train[outliers, ]
+```
+
+Let's examine some summary statistics for `SalePrice` and `LivArea` using the `summary` command.
+
+```{r}
+# Summary statistics of SalePrice
+summary(train$SalePrice)
+```
+
+```{r}
+# Summary statistics of LivArea
+summary(train$LivArea)
+```
+
+
+
+***:**The outliers "1142", "1450", and "2113" have significantly larger living areas (ground living area in square feet) than the majority of the other houses. From the summary statistics of the LiveArea variable, we can see that 75% of the houses have a living area of 1730 square feet or less. However, these three houses have living areas much larger than that, which makes them stand out as outliers. So, the saleprice could be way higher because their living areas are much larger and if this predictor is very important for predicting saleprice in the model, the model predictions for this model would make sense.*
+
+## (d): Dealing with Outliers
+
+When we find outliers that are also very influential in the model, we can consider the following options:
+
+-   **Remove the observations from the model**. This is appropriate if we believe the outliers are due to data errors, or if the outliers are substantially different from the target population that we are trying to model (for example, we could probably justify excluding a professional athlete from a model that uses data on physical exercise habits).
+
+-   **Treat the outlier values as missing data.** This should only be done if we believe the outlier values are due to data errors. Depending on the type of application, we may be able to use imputation or other methods to avoid discarding the entire observation from our dataset.
+
+-   **Keep the outliers in our model**. If we do not believe that there is anything inherently wrong with the outlier, then it may reflect something important about the system we are trying to model.
+
+In the setting of this model and this dataset, we will remove the outliers from our dataset. You can use this code to create a new training set (called `train2`) without the outliers.
+
+```{r}
+train2 = train[-which(rownames(train) %in% outliers), ]
+dim(train2)
+```
+
+`train2` has 1984 rows (3 fewer than the 1987 that `train` had). This makes sense since we removed 3 rows.
+
+Train a new linear regression model called `model2` using `train2` (i.e., with outliers removed) and print out a `summary` of the new model.
+
+```{r}
+### YOUR CODE HERE (train a new linear regression model) ###
+model2<-lm(SalePrice~., data=train2)
+
+summary(model2)
+plot(model2, whic=1)
+
+
+```
+
+
+
+***:** The new adjusted R^2 is0.789 which is higher than that of model1.Since the adjusted R^2 is higher here it means that model2 is better at explaining the varience in the salprice than model1. Also, model 1 labeled total rooms, year sold and BldgType2fmCon as insignificant which model2 does too. Model1 labeled full bath as insignificant but model2 doesn't.However, both models are better than the simple means model.*
+
+## (e): Analyzing Residual Variance 
+
+
+
+***:** At lower fitted values, the residuals are tightly clustered around zero. As the fitted values move towards higher numbers (especially beyond 2e+05), the spread of the residuals widens significantly. This indicates that the the variance of the errors is not constant across all levels of the predictor variables.*
+
+## (f): Investigating Coefficients, Significance, and Correlations
+
+Look at the coefficients and statistical significance of variables in `model2` by using the `summary` command
+
+```{r}
+### YOUR CODE HERE (print the summary of model2) ###
+
+summary(model2)
+```
+
+Compute the correlation matrix of the numerical variables in the training data.
+
+```{r}
+# Select all numerical columns without BldgType
+train2_numeric <- select(train2, -c('BldgType'))
+
+### YOUR CODE HERE (Compute the correlation matrix) ###
+correlation<-cor(train2_numeric)
+print(correlation)
+
+```
+
+
+***:** The coefficient for Bedrooms is -15,990. This means that, all else equal, each additional bedroom is associated with a decrease in the sale price. This result seems counter-intuitive because we typically expect more bedrooms to correlate with higher prices. The p-value for Bedrooms is < 2e-16, which indicates statistical significance despite the counter-intuitive sign.Bedrooms and TotalRooms(which highly correlates with LivArea:0.80) also show strong correlation (0.69), which could explain the counter-intuitive effect seen with Bedrooms. Larger houses with more rooms might not increase the price in the same way that a larger LivArea does. The explanation is also the same for Fullbath with a negative coeeficent of( $-6,868) with a p-value of 0.00112, which indicates that it is statistically significant.Fullbath highly correlates with LivArea(0.6) which mean that larger homes, which tend to have more bathrooms, are already priced higher due to their larger size(LivArea has the highest correlation with SalePrice), and the additional full bathroom doesn't increase the price as much.
+
+Also, the coefficient for PoolArea is -55.09, suggesting that having a pool is associated with a decrease in the sale price. This also seems surprising, as houses with pools often command higher prices.The p-value for PoolArea is 0.00322, indicating statistical significance. PoolArea doesn't highly correlate with other predictors; so this negative coefficent is perhaps due to factors like maintenance costs. *
+
+## (g): Impact of Fireplaces - Correlation vs Causation
+
+
+
+***:** Yes, the claim is supported by the model. The coefficient for Fireplaces is 1.130e+04, which means that, on average, each additional fireplace increases the sale price by $11,300. This result is statistically significant with a p-value less than 0.05, indicating that the relationship is not due to random chance.However,this is based on this model which uses certain predictors and this might change with other models that include/exclude other factors as it can effect the significance of the model *
+
+## (h): Training a Simplified Model and Evaluating Out-of-Sample Performance
+
+Train one final linear regression model using only the 5 variables: `BldgType`, `YearBuilt`, `Fireplaces`, `GarageArea`, `LivArea`. Call this model `model3`. Remember to train it on `train2` (i.e., outliers removed). Print out a `summary` of the model.
+
+```{r}
+### YOUR CODE HERE (Train model3 and display its summary) ### 
+model3<-lm(SalePrice~BldgType+Fireplaces+GarageArea+LivArea, data=train2)
+summary(model3)
+
+```
+
+Let's calculate the out-of-sample R² for `model2` on the testing data `test`. You can use the `predict` function to make predictions, and then calculate the `sse` and `sst` appropriately.
+
+```{r}
+# Compute and print OSR^2 for model2
+preds = predict(model2, newdata = test)
+
+sse = sum((test$SalePrice - preds)^2)
+sst = sum((test$SalePrice - mean(train2$SalePrice))^2)
+
+1 - sse/sst
+```
+
+Now, calculate the out-of-sample R² for `model3`.
+
+```{r}
+### YOUR CODE HERE (print OSR^2 for model3) ###
+
+preds=predict(model3, newdata=test)
+sse=sum((test$SalePrice-preds)^2)
+sst=sum((test$SalePrice-mean(train2$SalePrice))^2)
+1-sse/sst
+
+
+```
+
+
+
+***:** I will use model2 as it has higher  OSR^2 as it indicates that a larger proportion of the variance in the dependent variable is explained by model2, after accounting for the number of predictors used.*
+
+ 
+
+# CART for Predicting SalePrice
+
+In this problem, we will use a CART model instead of a linear regression model.
+
+## (a): Training and Visualizing a CART Model
+
+Train a CART model called `tree.model` on the training set without outliers (`train2`). Plot an image of your tree using the `prp()` function.
+
+```{r}
+### YOUR CODE HERE (train and print the tree) ### 
+
+tree.model  <- rpart(SalePrice ~., data=train2)
+
+# prp(your code here)
+
+prp(tree.model)
+
+```
+
+
+
+***:** based on this decision tree, YearBuilt, GarageArea, and LivArea are the most important variables, with YearBuilt being the most important factor in predicting the target outcome.I think having the yearbuilt as the most important predictor makes sense as the predictors can vary with when the house was built.However, it is too simple*
+
+## (b): Evaluating In-Sample Performance
+
+Use the model `tree.model` to make predictions on the training data `train2`. Compute the R² for `tree.model` on the training set.
+
+```{r}
+### YOUR CODE HERE (print the in-sample R^2) ### 
+
+preds2=predict(tree.model, newdata=train2)
+
+sse = sum((train2$SalePrice - preds2)^2)
+sst = sum((train2$SalePrice - mean(train2$SalePrice))^2)
+
+1 - (sse/sst)
+
+
+
+```
+
+
+
+***:** This model has adjusted r^2 of 0.71 and model3 had adjusted r^2 of 0.65.This indicates that this model explains a higher proportion of the variance in the saleprice than Model3 for the training data.*
+
+## (c): Fitting a Larger Tree
+
+Let's fit a larger tree to see if we can obtain more refined predictions. Set the `cp` (complexity parameter) value of the tree to **0.0005**. The default value of `cp` is **0.01**. Call this model `tree.model2`. This tree is quite complex and difficult to visualize.
+
+```{r}
+# Training a larger tree and visualizing it
+tree.model2 = rpart(SalePrice ~ ., data = train2 , control = rpart.control(cp =0.0005))
+prp(tree.model2)
+
+```
+
+Since this tree is so large, we can use a shortcut to analyze the different variables in the tree. Run the following code to extract a variable importance plot:
+
+```{r}
+# Variable importance plot
+barplot(tree.model2$variable.importance,cex.names=.5)
+```
+
+This plot shows the relative contributions of each variable to the final tree model (you might need to zoom in to see all of the variable names).
+
+
+
+***:** in the tree plot LivArea, GarageArea, and YearBuilt(in that order) are the most important variables in predicting SalePrice aligning with the regression model2 where these variables are highly significant (p <0.05).However variables such as bedrooms, and totalrooms are ranked low in the tree plot in terms of importance, while the regression model2 labels them as statistically significant in predicting the SalePrice.Also, the totalrooms variable is the 5th most important variable in predicting the Saleprice in the tree plot while model2 labeled it as statistically insignificant*
+
+## (d): Computing OSR² for Tree Models
+
+Compute the predicted `SalePrice values` and the OSR² for the test data using `tree.model` obtained in question 2a (with the default value of **cp = 0.01**)
+
+```{r}
+# Compute and print out-of-sample R^2
+preds = predict(tree.model, newdata=test)
+
+sse = sum((test$SalePrice - preds)^2)
+sst = sum((test$SalePrice - mean(train2$SalePrice))^2)
+
+1 - sse/sst
+```
+
+Compute the predicted `SalePrice` values and the OSR² for the test data using `tree.model2` obtained in question 2c (with **cp = 0.0005**)
+
+```{r}
+### YOUR CODE HERE (print the out-of-sample R^2) ### 
+
+preds = predict(tree.model2, newdata=test)
+
+sse = sum((test$SalePrice - preds)^2)
+sst = sum((test$SalePrice - mean(train2$SalePrice))^2)
+
+1 - sse/sst
+
+
+
+```
+
+
+***:** The 1st tree model is shorter and so it is easier to interpret.It runs less risk with overfitting the model where it so too specific to the training data.But this model has a lower OSR^2 than the 2nd tree model. The 2nd tree model is big and so is harder to interpet and might be overfitting.However, this model has a higher OSR^2 than the 1st model which indicates that this model is better at explaining the variation in the saleprice.I think model1 is too short to make the best prediction while model2 is too big and so if overfitting*
+
+## (e): Comparing Tree Models with Regression Models
+
+Recall that our best linear regression model was `model2`. It had the following OSR²:
+
+```{r}
+# Compute and print OSR^2 for model2
+preds = predict(model2, newdata = test)
+
+sse = sum((test$SalePrice - preds)^2)
+sst = sum((test$SalePrice - mean(train2$SalePrice))^2)
+
+1 - sse/sst
+```
+
+
+***:** Model2(0.77) has a slighlt higher OSR^2 than tree.model.2(0.76). I would choose model2 because it is easier to interpretable and the Linear regression provides coefficients, which show how each variable affects SalePrice and the significance of the predictors. In this case I care about the effects of each varaible on saleprice and not just which ones are important. Also, the tree model is sensitive to pruning where changing the parameters like cp and minsplit can change the tree you get.But this will all depend on whether the linearity assumption is met, because if the relationship between the predictors and the saleprice is not linear, I will not use linear regression *
+
+## (f): Finding the Optimal Complexity Parameter Value 
+
+
+***:** We can use a cross validation method where the data is split multiple folds, training the model with different cp values, and evaluating the performance on the validation folds( with R^2 or the RMSE).Then we can choose which cp results the best model performance*
+
+## (g): Evaluating Train/Test Splits and Model Comparisons
+
+**:** Explain the purpose of the train/test split and how we use the resulting datasets. Do you think there are any problems with:
+
+-   the way we have chosen the “best tree” in 2d?
+
+-   the way we compare the OSR² of our “best tree” to the OSR² of the “ best linear regression model” we constructed in 1h?
+
+***:** Splitting the data into training and testing sets is very important because we have to make sure the model is unfamilair with the test data to avoid data leakage.I think one problem here is that we removed the 3 outliers from the training data but not the test data which makes the test data less representative. Also, I think one issue with the he way we compare the OSR² of our “best tree” to the OSR² of the “ best linear regression model” we constructed in 1h is that linear regression assumes linearity so if the relationship is not linear the model doesn't perform well at predicting while trees don't assume linearity. *
+
+ 
+
+# A Simple Logistic Regression Problem
+
+In this problem, we consider a real-world business problem: measuring customer churn for Watson Analytics. The dataset for this question describes the usage behavior of 7,032 users across one year. You will work with the dataset provided in the **customerchurn.csv** file. This file has been pre-processed to simplify the analysis.
+
+The dataset **customerchurn.csv** contains 7 variables described below. The first variable `Churn` is the user’s churn status — which we aim to predict. The other variables describe other various attributes:
+
+-   **Churn**: the user’s usage status at year-end
+
+-   **MonthlyCharges**: monetary cost of user’s plan
+
+-   **SeniorCitizen**: whether user age is above 60 years
+
+-   **PaymentMethod**: channel of payment
+
+-   **InternetService**: type of internet connection
+
+-   **tenure**: number of years passed as a user
+
+-   **Contract**: payment installment terms
+
+Let's read in the dataset to the variable `churn`.
+
+```{r}
+# Load the dataset
+churn <- read.csv("customerchurn.csv", stringsAsFactors=FALSE)
+head(churn)
+```
+
+## (a): Computing the Churn Rate
+
+Use the table() function on `churn` to study the information in the `Churn` variable.
+
+```{r}
+table(churn$Churn)
+```
+
+
+***:** 1869 customers churned while 5163 didn't.*
+
+## (b): Splitting Data and Training a Logistic Regression Model
+
+We will now develop a classification model to predict customer churn for Watson Analytics. First, split the dataset into a training set (75%) and a test set (25%). Please use the code below to ensure that you get the same split as the TA’s solution.
+
+```{r}
+# Split data
+RNGkind(sample.kind = "Rounding")
+set.seed(1)
+idx = createDataPartition(churn$Churn, p = 0.75, list = FALSE)
+train = churn[idx,]
+test = churn[-idx,]
+
+mean(train$Churn)
+```
+
+You can check whether your split is the same as that of the TAs by seeing if mean(train\$Churn). equals **0.2622298**. If you get a different answer, please contact the TAs.
+
+We can use the `as.factor()` function to turn `SeniorCitizen` into a dummy variable.
+
+```{r}
+train$SeniorCitizen=as.factor(train$SeniorCitizen) 
+test$SeniorCitizen=as.factor(test$SeniorCitizen) 
+```
+
+Train a logistic regression model called `log.model` (on the training set) to predict `Churn` using all variables except `PaymentMethod` and print out a `summary` of the model.
+
+```{r}
+### YOUR CODE HERE (train a logistic regression model) ### 
+
+log.model <- glm(Churn ~ . - PaymentMethod, data = train, family = binomial)
+
+summary(log.model)
+
+```
+
+
+
+***:** The coefficient of the SeniorCitizen(0.44) which is statistically signifcant in this model indicates that being a seniorcitizen has higher odds of churn than nonsenior citizens when all else remains consistent.*
+
+## (c): Calculating the Churn Probability
+
+
+***:**the churn probabality is 0.66  *
+
+```{r}
+### YOUR CODE HERE (fill in the gaps) ###
+
+# Make a copy of the fifth row
+fifth.user = churn[c(5),]
+fifth.user$SeniorCitizen = as.factor(fifth.user$SeniorCitizen)
+
+# Make a prediction for the patient
+
+predict(log.model, newdata = fifth.user, type = "response")
+
+
+
+```
+
+## (d): Computing the Confusion Matrix
+
+Using the model created in the previous part, make churn predictions on the test set. Your manager chooses to be overly cautious in churn prediction and asks you to set the cutoff probability as **0.3** - any user with a probability higher than this will be predicted to churn. Print the confusion matrix for the test set predictions.
+
+```{r}
+### YOUR CODE HERE (fill in the gaps) ###
+
+# Make predictions on the test set
+predicted = predict(log.model, newdata=test, type='response')
+
+# Set cutoff probability for churn
+predicted <- ifelse(predicted > 0.3, 1, 0)
+
+# Compute the confusion matrix
+# (your code here)
+table(predicted, test$Churn)
+
+
+```
+
+
+
+***:** the number of false positives is 112 which means that the model labeled 112 people as churned while they actually didn't in the data.*
+
+## (e): Minimizing False Positives or False Negatives 
+
+
+***:**I will make this decision based on the revenue impact of false negatives (customers who actually churned but were labeled as not churned) and false positives (customers who didn’t churn but were labeled as churned). I'll consider the loss from missing actual churners versus the cost of targeting customers who don’t need retention.*
