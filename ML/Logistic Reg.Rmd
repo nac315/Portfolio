@@ -1,0 +1,270 @@
+---
+title: 'Logistic Regression'
+author: "Naima Abdirahman"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Loading Libraries
+
+Load the following libraries.
+
+```{r warning=FALSE, include=FALSE}
+library(caTools)
+library(ROCR)
+library(ggplot2)
+library(dplyr)
+library(pROC)
+library(caret)
+```
+
+#  Logistic regression for the Framingham Heart Study
+
+Heart disease is the leading cause of death worldwide. About 15.5 million people died from coronary heart disease (CHD) in 2022---over 22% of all deaths that year across the globe (including COVID). In the late 1940s, the U.S. government started to take a variety of actions to address heart disease. As part of this effort, they decided to track a large cohort of initially-healthy people over time.
+
+The town of Framingham, MA was selected as the site for the study. The study started in 1948, comprising 5,209 participants. Participants were given a questionnaire and a medical exam every two years. Data were also collected on the participants' physical and behavioral characteristics. Over the years, the study has expanded to include multiple generations and many factors---including genetic information. This dataset is now famously known as the Framingham Heart Study.
+
+The dataset is contained in the file `framingham.csv`. There are 3,658 observations, each corresponding to a study participant. You will aim to predict `tenYearCHD`---that is, whether a patient experiences CHD within 10 years of his/her first examination. You will also aim to identify risk factors in order to make recommendations to prevent CHD. There are 16 variables in the dataset:
+
+| Variable          | Description                                                                                           |
+|-------------------|-----------------------------------------------------|
+| `male`            | Gender of patient (1 if male, 0 if female)                                                            |
+| `age`             | Age (in years) at first examination                                                                   |
+| `education`       | Some high school, high school/GED, some college/vocational school, college                            |
+| `currentSmoker`   | 1 if patient is a current smoker, 0 otherwise                                                         |
+| `cigsPerDay`      | Number of cigarettes per day                                                                          |
+| `BPMeds`          | 1 if patient is on blood pressure medication at time of first examination, 0 otherwise                |
+| `prevalentStroke` | 1 if patient previously had a stroke, 0 otherwise                                                     |
+| `prevalentHyp`    | 1 if patient is currently hypertensive, 0 otherwise                                                   |
+| `diabetes`        | 1 if patient currently has diabetes, 0 otherwise                                                      |
+| `totChol`         | Total cholesterol (mg/dL)                                                                             |
+| `sysBP`           | Systolic blood pressure                                                                               |
+| `diaBP`           | Diastolic blood pressure                                                                              |
+| `BMI`             | Body Mass Index: weight (kg)/height (m)2                                                              |
+| `heartRate`       | Heart rate (beats/minute)                                                                             |
+| `glucose`         | Blood glucose level (mg/dL)                                                                           |
+| `TenYearCHD`      | 1 if patient has experienced coronary heart disease within 10 years of first examination, 0 otherwise |
+
+Let's read in the dataset first to the variable `framingham` and examine the first 6 rows of this dataset with the `head` function. Run the following commands to read in the data. The first command reads in the dataset and the second command examines the first 6 rows of this dataset with the `head` function. Remember to save the data file `framingham.csv`
+
+```{r}
+# Load dataset
+framingham <- read.csv("framingham.csv")
+
+# View the first 6 rows of data
+head(framingham)
+```
+
+Translate the categorical variables into factors.
+
+```{r}
+#Set as factors
+framingham$TenYearCHD <- as.factor(framingham$TenYearCHD)
+framingham$male <- as.factor(framingham$male)
+framingham$currentSmoker <- as.factor(framingham$currentSmoker)
+framingham$BPMeds <- as.factor(framingham$BPMeds)
+framingham$prevalentHyp <- as.factor(framingham$prevalentHyp)
+framingham$diabetes <- as.factor(framingham$diabetes)
+framingham$prevalentStroke <- as.factor(framingham$prevalentStroke)
+framingham$education <- as.factor(framingham$education)
+```
+
+Then, split the observations randomly into a training set (containing 75% of the data) and a test set (containing the remaining 25% of the data).
+
+```{r}
+# Train/test split
+RNGkind(sample.kind = "Rounding")
+set.seed(1)
+N <- nrow(framingham)
+idx = createDataPartition(framingham$TenYearCHD, p=0.75, list = FALSE)
+train = framingham[idx, ]
+test = framingham[-idx, ]
+
+mean(train$age)
+```
+
+## (a): Logistic regression for `tenYearCHD` 
+
+Using all the independent variables in the dataset, construct a logistic regression model called `model` to predict the probability that a patient will experience CHD within the next 10 years. Which risk factors are statistically significant?
+
+```{r}
+model <- glm(TenYearCHD ~ . , data = train, family = binomial)
+summary(model)
+```
+
+**Answer:** *Gender,age, cigsPerDay, Total cholesterol (mg/dL), sysBP, glucose,prevalentStroke .*
+
+## (b): Predicting with the model 
+
+Consider the 39th patient in the original dataset (age: 53, . . . , glucose: 215). Using the logistic regression model, what is the predicted probability that this patient will experience CHD in the next ten years? The patient is recommended by her doctor to lower her cholesterol. What is the predicted probability of CHD for a patient with the same characteristics as this patient, but who has a total cholesterol level of 200?
+
+You will need to provide data in the same format as the training set in order to make a prediction for the hypothetical lower cholesterol patient. The easiest way to do this is to make a copy of the 39th row of the dataset (which will automatically copy the variable types) and then update the copied columns that we would like to change:
+
+```{r}
+# Make two copies of the thirty-ninth row, containing the patient of interest
+patient.of.interest.copies = framingham[39,]
+patient.of.interest.copies[2,] = framingham[39,]
+
+# Use the following code (change "columnName" to the name of the variable you want to update and "newValue" to the new value you want to set)
+patient.of.interest.copies$totChol[2] = 200  #(YOUR CODE UPDATES HERE)
+print(patient.of.interest.copies)
+
+# Predict before and after cholesterol reduction
+patient.of.interest <- predict(model, newdata = patient.of.interest.copies[1,], type = "response")
+patient.of.interest.CHDchange<- predict(model, newdata = patient.of.interest.copies[2,], type = "response")
+print(patient.of.interest)
+print(patient.of.interest.CHDchange)
+
+
+```
+
+**:** *before the cholesterol level was decreased to 200, the model predicted a probability of 0.684 of CHD.and when the cholesterol was changed to 200, it predicted probability of developing CHD of 0.5794893.*
+
+## (c) ROC and AUC (15 points)
+
+Generate probability predictions for all of the observations in the test set using our logistic regression models. Plot the test set ROC, and compute the AUC.
+
+```{r}
+#Predict for the test set
+pred <- predict(model, newdata=test, type='response')
+
+#Create the prediction object
+rocr.pred <- prediction(pred, test$TenYearCHD)
+
+# Plot the ROC curve
+plot(performance(rocr.pred, "tpr", "fpr"), col="blue", lty=1)
+abline(0, 1, col="red", lty=2)
+legend("bottomright", legend=c("Logistic Regression", "Baseline"), col=c("blue", "red"), lty=1:2, cex=0.7)
+
+
+```
+
+```{r}
+AUC = as.numeric(performance(rocr.pred, "auc")@y.values)
+
+AUC
+```
+
+**:** *AUC of 0.7102901 which I will say is In Between.*
+
+# Problem 2: Using the model for prescriptive decisions
+
+To lower the risk of CHD, physicians can prescribe preventive medication that lowers blood pressure or cholesterol. Recommending preventive medications requires evidence-based analysis that weighs the pros and cons of such interventions. A common methodology is known as health economic evaluation, which accounts for medical costs and health benefits (a monetized metric of improved life longevity). In fact, many countries establish clinical practice guidelines using such formalized health economic evaluation methodologies (e.g., the National Institute for Health and Clinical Excellence in England).
+
+Let us suppose that a colleague of yours has just completed a health economics study to assess a recently approved medication. The study has estimated that patients who experience CHD within the next 10 years are expected to incur a lifetime cost of \$160,000 associated with the disease --- including the costs of treatment (\$80,000) as well as lower quality of life and life expectancy (\$80,000). The medicine is expected to lower patients' risk of developing CHD within the next 10 years by a factor of 2. Regardless of whether a patient develops CHD, the preventive medication costs \$6,400 (per patient) over the next 10 years. A table describing the study's analysis is shown below, where p denotes the probability that a patient will develop CHD within the next 10 years without medication.
+
+|                      |        | Probability |   Cost    |
+|----------------------|--------|:-----------:|:---------:|
+| No medication        | CHD    |    $$p$$    | \$160,000 |
+|                      | No CHD |   $$1-p$$   |    \$0    |
+| Prescribe medication | CHD    |   $$p/2$$   | \$166,400 |
+|                      | No CHD |  $$1-p/2$$  |  \$6,400  |
+
+## (a) Treatment threshold
+
+What is the expected cost for a patient who does not take the preventive medication, as a function of p? And what is the expected cost for a patient who is prescribed the preventive medication, as a function of p? For which values of p would you recommend the medication (considering cost alone)?
+
+```{r}
+
+# Treatment allocation
+
+treatment_cost = 6400 
+CHD_cost = 160000 
+risk_reduction = 2  
+
+# What probability of CHD makes the expected costs for treatment lower than the expected cost of no treatment? 
+
+#threshold:160000*p=((p/2)*16000+6400)+((1-p/2)*6400)
+threshold <- treatment_cost/(CHD_cost-(CHD_cost/risk_reduction))  
+```
+
+## (b) Accuracy metrics (10 points)
+
+Using the initial logistic regression model constructed in question (1a) and the probability threshold you just computed in question (2a), compute predictions of CHD events for all of the patients in the test set. Assess the quality of the model by computing the model's confusion matrix, accuracy, True Positive Rate, and False Positive Rate (**using the treated patients, labeled "1", as your positive class, which may not match the R output log!**). You should include the values of all these quantities in your submitted answer. Comment briefly on what each metric says about the model.
+
+```{r}
+threshold =0.08
+ 
+# Find which customers are treated
+treated = predict(model, newdata=test, type="response")
+treated <- ifelse(treated > threshold, 1, 0)
+
+# Compute the confusion matrix of test$TenYearCHD and treated and then compute the accuracy, TRP, and FPR
+confusion.matrix =table(test$TenYearCHD, treated)
+accuracy =sum(diag(confusion.matrix)) / sum(confusion.matrix)
+TPR = confusion.matrix[2,2]/sum(confusion.matrix[2,])
+FPR = confusion.matrix[1,2]/sum(confusion.matrix[1,])
+c(accuracy,TPR,FPR)
+```
+
+: *The accuracy is 0.455, which is lower than a random guess (0.5). This suggests that the model is not performing well overall and may not be reliable for making predictions.However, the True Positive Rate (TPR) is 0.885, meaning that the model correctly identifies 88.5% of actual CHD cases.On the other hand, the False Positive Rate (FPR) is 0.622, which means the model incorrectly predicts CHD in 62.2% of cases where the patient does not actually have CHD. This high FPR suggests that many patients who do not need treatment might still be prescribed medication, leading to unnecessary costs.*
+
+## (c) False positives and negatives
+
+Please comment on the number of false positives and false negatives in the confusion matrix. As a medical practitioner, which of these two quantities would you recommend to focus on minimizing? Why?
+
+```{r}
+confusion.matrix
+```
+
+: *The number of False positive is 482 and the false negatives are 16.As a medical practitioner, minimizing false negatives is more critical. A false negative means a patient who actually has a high risk of developing CHD is mistakenly classified as not in risk. This could lead to a lack of preventive interventions, increasing the likelihood of severe outcomes such as heart attacks or death.*
+
+## (d) Economic cost
+
+If patients are prescribed the medication using the probability threshold computed in question (2a) in conjunction with the predicted probabilities using the model in question (1a), what will be the expected economic cost per patient for the patients in the test set?
+
+```{r}
+#Compute total expected cost given the threshold policy with a for loop
+total_expected_cost = 0
+for (i in 1:length(treated)){
+  if (treated[i]){
+
+    total_expected_cost <- total_expected_cost +166400#(YOUR CODE HERE)
+
+
+  } else{
+
+    total_expected_cost <- total_expected_cost +160000 #(YOUR CODE HERE)
+
+  }
+}
+economic.cost <- total_expected_cost/length(treated)
+print(economic.cost)
+
+```
+
+**Answer:** *The economic cost is \$164,236.3.*
+
+## (e) Idealized cost 
+
+Consider the model in question (2d) versus an "ideal" setting with complete information (under which medication is only prescribed to patients in the test set who would otherwise develop CHD). Compute the expected economic cost for all patients in the test set under the "ideal" model.
+
+```{r}
+# Optimal treatment
+
+# TODO: Compute total expected cost of the optimal policy 
+total_expected_cost = 0
+for (i in 1:length(treated)){
+  if(test$TenYearCHD[i]==1){
+
+    total_expected_cost <- total_expected_cost + 166400#(YOUR CODE HERE)
+
+    
+  } else{
+    
+    total_expected_cost <- total_expected_cost+160000
+
+  }
+}
+# cost under ideal setting
+idealCost <- total_expected_cost/length(treated)
+idealCost
+
+```
+
+**:** *Now the economic cost is \$160,973.3. In the ideal scenario, where we know exactly which patients will develop coronary heart disease, the economic cost is lower because medication is only given to those who need it. In the model from question (2d), the cost is higher because medication is being prescribed based on predicted probabilities, and as a result, some patients who don't actually need it are being treated.*
+
+## (f) Ethical implications 
+
+*The model may systematically under treat or over treat particular populations if the data set under represents those demographic groups.To fix for data biases, make sure the data is representative of the demographic. Also, patients incorrectly classified as false negatives might not receive necessary medication, increasing their risk of developing CHD and its consequences.To fix for this we can weigh false negatives more heavily since missing a high-risk patient has serious consequences or decrease the probability threshold.*
